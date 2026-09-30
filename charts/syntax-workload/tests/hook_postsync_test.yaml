@@ -1,0 +1,13 @@
+suite: PostSync Hook kind
+values:
+  - values/hook-postsync.yaml
+tests:
+  - it: supports a PostSync hook with its own image, args, env, and delete policy
+    template: templates/hook.yaml
+    asserts:
+      - equal: { path: 'metadata.annotations["argocd.argoproj.io/hook"]', value: PostSync }
+      - equal: { path: 'metadata.annotations["argocd.argoproj.io/hook-delete-policy"]', value: HookSucceeded }
+      - equal: { path: spec.backoffLimit, value: 2 }
+      - equal: { path: "spec.template.spec.containers[0].image", value: curlimages/curl }
+      - equal: { path: "spec.template.spec.containers[0].args", value: ["curl -X POST https://example.com/dispatch"] }
+      - equal: { path: "spec.template.spec.containers[0].env[0].name", value: TOKEN }
