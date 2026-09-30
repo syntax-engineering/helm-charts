@@ -1,0 +1,25 @@
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: terra-sidekiq-standard-vpa
+  namespace: terra-env
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: terra-sidekiq-standard
+  updatePolicy:
+    # "Off" = recommendation-only.
+    # To actuate recommendations as in-place resizes, set "InPlaceOrRecreate" in Overlays.
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: terra-sidekiq-standard
+        controlledResources: ["cpu", "memory"]
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 500m
+          memory: 1Gi
+        maxAllowed:
+          cpu: 1300m
+          memory: 3500Mi
