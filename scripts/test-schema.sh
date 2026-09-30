@@ -10,6 +10,7 @@ for f in "$chart"/tests/schema/good/*.yaml; do
 done
 for f in "$chart"/tests/schema/bad/*.yaml; do
   expect=$(sed -n '1s/^# expect: //p' "$f")
+  [ -n "$expect" ] || { echo "FAIL (no # expect: line): $f"; fail=1; continue; }
   if out=$(helm template t "$chart" -f "$f" 2>&1); then
     echo "FAIL (should not render): $f"; fail=1
   elif ! grep -qF "$expect" <<<"$out"; then

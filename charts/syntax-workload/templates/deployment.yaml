@@ -21,7 +21,7 @@ spec:
   {{- if not (include "sw.isOff" $w.strategy) }}
   strategy:
     type: RollingUpdate
-    rollingUpdate: {{- toYaml ($w.strategy | default $.Values.defaults.strategy) | nindent 6 }}
+    rollingUpdate: {{- toYaml (mergeOverwrite (deepCopy $.Values.defaults.strategy) ($w.strategy | default dict)) | nindent 6 }}
   {{- end }}
   template:
     metadata:

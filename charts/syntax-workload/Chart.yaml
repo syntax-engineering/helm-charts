@@ -3,3 +3,5 @@ name: syntax-workload
 description: Standard Rails web, worker, cronjob, and deploy-hook workloads for Syntax apps
 type: application
 version: 0.1.0
+sources:
+  - https://github.com/syntax-engineering/helm-charts

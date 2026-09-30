@@ -84,7 +84,7 @@ containers:
 {{- define "sw.assertUniqueSelectors" -}}
 {{- $seen := dict -}}
 {{- range $name, $w := .Values.workloads -}}
-{{- if and (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) -}}
+{{- if and (has $w.kind (list "Web" "Worker" "CronJob")) (ne $w.enabled false) -}}
 {{- $role := $w.role | default $name -}}
 {{- if hasKey $seen $role -}}
 {{- fail (printf "workloads %q and %q both select role=%s; give one of them a different role" $name (get $seen $role) $role) -}}

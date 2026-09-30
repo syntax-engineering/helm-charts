@@ -119,6 +119,20 @@ tests:
       - failedTemplate:
           errorPattern: 'workloads "sidekiq" and "critical" both select role=sidekiq'
 
+  - it: fails when a CronJob shares a role with a Deployment workload
+    template: templates/deployment.yaml
+    set:
+      workloads.sweep: { kind: CronJob, role: sidekiq, schedule: "0 * * * *", command: [bundle, exec, rake, sweep] }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'both select role=sidekiq'
+
+  - it: keeps the default maxUnavailable when a strategy override sets only maxSurge
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.strategy: { maxSurge: 1 } }
+    asserts:
+      - equal: { path: spec.strategy.rollingUpdate, value: { maxSurge: 1, maxUnavailable: 0 } }
+
   - it: renders a PDB with maxUnavailable 1 by default
     template: templates/pdb.yaml
     asserts:
