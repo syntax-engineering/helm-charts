@@ -1,0 +1,15 @@
+suite: golden output for the standard fixture
+values:
+  - values/standard.yaml
+tests:
+  - it: matches the committed golden output
+    templates:
+      - templates/deployment.yaml
+      - templates/service.yaml
+      - templates/pdb.yaml
+      - templates/vpa.yaml
+      - templates/scaledobject.yaml
+      - templates/cronjob.yaml
+      - templates/hook.yaml
+    asserts:
+      - matchSnapshot: {}

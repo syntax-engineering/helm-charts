@@ -1,0 +1,527 @@
+matches the committed golden output:
+  1: |
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: acme-nightly
+      namespace: acme-env
+    spec:
+      concurrencyPolicy: Forbid
+      failedJobsHistoryLimit: 3
+      jobTemplate:
+        spec:
+          activeDeadlineSeconds: 3600
+          template:
+            metadata:
+              labels:
+                app: acme
+                role: nightly
+            spec:
+              containers:
+                - command:
+                    - bundle
+                    - exec
+                    - rake
+                    - nightly
+                  envFrom:
+                    - configMapRef:
+                        name: acme-config
+                    - secretRef:
+                        name: acme-secrets
+                  image: ghcr.io/example/acme:1.0.0
+                  name: acme-nightly
+                  resizePolicy:
+                    - resourceName: cpu
+                      restartPolicy: NotRequired
+                    - resourceName: memory
+                      restartPolicy: NotRequired
+                  resources:
+                    limits:
+                      cpu: 2000m
+                      memory: 4Gi
+                    requests:
+                      cpu: 1000m
+                      memory: 2Gi
+              imagePullSecrets:
+                - name: acme-registry
+              nodeSelector:
+                pool: apps
+              restartPolicy: Never
+              serviceAccountName: acme-sa
+      schedule: 0 3 * * *
+      successfulJobsHistoryLimit: 3
+  2: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: acme-mcp
+      namespace: acme-env
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
+          app: acme
+          role: mcp
+      strategy:
+        rollingUpdate:
+          maxSurge: 25%
+          maxUnavailable: 0
+        type: RollingUpdate
+      template:
+        metadata:
+          labels:
+            app: acme
+            role: mcp
+        spec:
+          containers:
+            - envFrom:
+                - configMapRef:
+                    name: acme-config
+                - secretRef:
+                    name: acme-secrets
+              image: ghcr.io/example/acme:1.0.0
+              livenessProbe:
+                failureThreshold: 6
+                httpGet:
+                  path: /up
+                  port: 3000
+                  scheme: HTTP
+                periodSeconds: 10
+                timeoutSeconds: 5
+              name: acme-mcp
+              ports:
+                - containerPort: 3000
+                  name: http
+                  protocol: TCP
+              readinessProbe:
+                failureThreshold: 2
+                httpGet:
+                  path: /up
+                  port: 3000
+                  scheme: HTTP
+                periodSeconds: 3
+                successThreshold: 1
+                timeoutSeconds: 1
+              resizePolicy:
+                - resourceName: cpu
+                  restartPolicy: NotRequired
+                - resourceName: memory
+                  restartPolicy: NotRequired
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4Gi
+                requests:
+                  cpu: 1000m
+                  memory: 2Gi
+              startupProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /up
+                  port: 3000
+                  scheme: HTTP
+                periodSeconds: 5
+                timeoutSeconds: 3
+          imagePullSecrets:
+            - name: acme-registry
+          nodeSelector:
+            pool: apps
+          serviceAccountName: acme-sa
+          topologySpreadConstraints:
+            - labelSelector:
+                matchLabels:
+                  app: acme
+                  role: mcp
+              matchLabelKeys:
+                - pod-template-hash
+              maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+  3: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: acme-sidekiq
+      namespace: acme-env
+    spec:
+      selector:
+        matchLabels:
+          app: acme
+          role: sidekiq
+      strategy:
+        rollingUpdate:
+          maxSurge: 25%
+          maxUnavailable: 0
+        type: RollingUpdate
+      template:
+        metadata:
+          labels:
+            app: acme
+            role: sidekiq
+        spec:
+          containers:
+            - command:
+                - bundle
+                - exec
+                - sidekiq
+              envFrom:
+                - configMapRef:
+                    name: acme-config
+                - secretRef:
+                    name: acme-secrets
+              image: ghcr.io/example/acme:1.0.0
+              name: acme-sidekiq
+              resizePolicy:
+                - resourceName: cpu
+                  restartPolicy: NotRequired
+                - resourceName: memory
+                  restartPolicy: NotRequired
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4Gi
+                requests:
+                  cpu: 1000m
+                  memory: 2Gi
+          imagePullSecrets:
+            - name: acme-registry
+          nodeSelector:
+            pool: apps
+          serviceAccountName: acme-sa
+          topologySpreadConstraints:
+            - labelSelector:
+                matchLabels:
+                  app: acme
+                  role: sidekiq
+              matchLabelKeys:
+                - pod-template-hash
+              maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+  4: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: acme-web
+      namespace: acme-env
+    spec:
+      selector:
+        matchLabels:
+          app: acme
+          role: web
+      strategy:
+        rollingUpdate:
+          maxSurge: 25%
+          maxUnavailable: 0
+        type: RollingUpdate
+      template:
+        metadata:
+          labels:
+            app: acme
+            role: web
+        spec:
+          containers:
+            - envFrom:
+                - configMapRef:
+                    name: acme-config
+                - secretRef:
+                    name: acme-secrets
+              image: ghcr.io/example/acme:1.0.0
+              livenessProbe:
+                failureThreshold: 6
+                httpGet:
+                  path: /healthz
+                  port: 8080
+                  scheme: HTTP
+                periodSeconds: 10
+                timeoutSeconds: 5
+              name: acme-web
+              ports:
+                - containerPort: 8080
+                  name: http
+                  protocol: TCP
+              readinessProbe:
+                failureThreshold: 2
+                httpGet:
+                  path: /healthz
+                  port: 8080
+                  scheme: HTTP
+                periodSeconds: 3
+                successThreshold: 1
+                timeoutSeconds: 1
+              resizePolicy:
+                - resourceName: cpu
+                  restartPolicy: NotRequired
+                - resourceName: memory
+                  restartPolicy: NotRequired
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4Gi
+                requests:
+                  cpu: 1000m
+                  memory: 2Gi
+              startupProbe:
+                failureThreshold: 60
+                httpGet:
+                  path: /healthz
+                  port: 8080
+                  scheme: HTTP
+                periodSeconds: 5
+                timeoutSeconds: 3
+          imagePullSecrets:
+            - name: acme-registry
+          nodeSelector:
+            pool: apps
+          serviceAccountName: acme-sa
+          topologySpreadConstraints:
+            - labelSelector:
+                matchLabels:
+                  app: acme
+                  role: web
+              matchLabelKeys:
+                - pod-template-hash
+              maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+  5: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      annotations:
+        argocd.argoproj.io/hook: PreSync
+        argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+      name: acme-migrate-db
+      namespace: acme-env
+    spec:
+      activeDeadlineSeconds: 1800
+      backoffLimit: 0
+      template:
+        spec:
+          containers:
+            - command:
+                - bundle
+                - exec
+                - rake
+                - db:migrate
+              envFrom:
+                - configMapRef:
+                    name: acme-config
+                - secretRef:
+                    name: acme-secrets
+              image: ghcr.io/example/acme:1.0.0
+              name: acme-migrate-db
+              resizePolicy:
+                - resourceName: cpu
+                  restartPolicy: NotRequired
+                - resourceName: memory
+                  restartPolicy: NotRequired
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 4Gi
+                requests:
+                  cpu: 1000m
+                  memory: 2Gi
+          imagePullSecrets:
+            - name: acme-registry
+          nodeSelector:
+            pool: apps
+          restartPolicy: Never
+          serviceAccountName: acme-sa
+  6: |
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: acme-mcp-pdb
+      namespace: acme-env
+    spec:
+      maxUnavailable: 1
+      selector:
+        matchLabels:
+          app: acme
+          role: mcp
+  7: |
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: acme-sidekiq-pdb
+      namespace: acme-env
+    spec:
+      maxUnavailable: 1
+      selector:
+        matchLabels:
+          app: acme
+          role: sidekiq
+  8: |
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: acme-web-pdb
+      namespace: acme-env
+    spec:
+      maxUnavailable: 1
+      selector:
+        matchLabels:
+          app: acme
+          role: web
+  9: |
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: acme-sidekiq-hpa
+      namespace: acme-env
+    spec:
+      advanced:
+        horizontalPodAutoscalerConfig:
+          behavior:
+            scaleDown:
+              stabilizationWindowSeconds: 300
+      fallback:
+        failureThreshold: 3
+        replicas: 2
+      maxReplicaCount: 4
+      minReplicaCount: 2
+      scaleTargetRef:
+        name: acme-sidekiq
+      triggers:
+        - metadata:
+            query: max(sidekiq_queue_latency_seconds)
+            serverAddress: http://prometheus.monitoring:9090
+            threshold: "100"
+          name: sidekiq_latency_max
+          type: prometheus
+  10: |
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: acme-web-hpa
+      namespace: acme-env
+    spec:
+      advanced:
+        horizontalPodAutoscalerConfig:
+          behavior:
+            scaleDown:
+              stabilizationWindowSeconds: 300
+      fallback:
+        failureThreshold: 3
+        replicas: 2
+      maxReplicaCount: 5
+      minReplicaCount: 2
+      scaleTargetRef:
+        name: acme-web
+      triggers:
+        - metadata:
+            query: sum(rate(http_requests_total[1m]))
+            serverAddress: http://prometheus.monitoring:9090
+            threshold: "2.00"
+          name: http_requests_rate
+          type: prometheus
+  11: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: acme-mcp
+      namespace: acme-env
+    spec:
+      ports:
+        - name: http
+          port: 3000
+          protocol: TCP
+          targetPort: http
+      selector:
+        app: acme
+        role: mcp
+  12: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: acme-web
+      namespace: acme-env
+    spec:
+      ports:
+        - name: http
+          port: 8080
+          protocol: TCP
+          targetPort: http
+      selector:
+        app: acme
+        role: web
+  13: |
+    apiVersion: autoscaling.k8s.io/v1
+    kind: VerticalPodAutoscaler
+    metadata:
+      name: acme-mcp-vpa
+      namespace: acme-env
+    spec:
+      resourcePolicy:
+        containerPolicies:
+          - containerName: acme-mcp
+            controlledResources:
+              - cpu
+              - memory
+            controlledValues: RequestsOnly
+            maxAllowed:
+              cpu: 4000m
+              memory: 8Gi
+            minAllowed:
+              cpu: 500m
+              memory: 1Gi
+      targetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: acme-mcp
+      updatePolicy:
+        updateMode: "Off"
+  14: |
+    apiVersion: autoscaling.k8s.io/v1
+    kind: VerticalPodAutoscaler
+    metadata:
+      name: acme-sidekiq-vpa
+      namespace: acme-env
+    spec:
+      resourcePolicy:
+        containerPolicies:
+          - containerName: acme-sidekiq
+            controlledResources:
+              - cpu
+              - memory
+            controlledValues: RequestsOnly
+            maxAllowed:
+              cpu: 4000m
+              memory: 8Gi
+            minAllowed:
+              cpu: 500m
+              memory: 1Gi
+      targetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: acme-sidekiq
+      updatePolicy:
+        updateMode: "Off"
+  15: |
+    apiVersion: autoscaling.k8s.io/v1
+    kind: VerticalPodAutoscaler
+    metadata:
+      name: acme-web-vpa
+      namespace: acme-env
+    spec:
+      resourcePolicy:
+        containerPolicies:
+          - containerName: acme-web
+            controlledResources:
+              - cpu
+              - memory
+            controlledValues: RequestsOnly
+            maxAllowed:
+              cpu: 4000m
+              memory: 8Gi
+            minAllowed:
+              cpu: 500m
+              memory: 1Gi
+      targetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: acme-web
+      updatePolicy:
+        updateMode: "Off"

@@ -1,0 +1,36 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+imagePullSecret: acme-registry
+serviceAccount: acme-sa
+nodeSelector: { pool: apps }
+envFrom:
+  configMaps: [acme-config]
+  secrets: [acme-secrets]
+prometheus:
+  serverAddress: http://prometheus.monitoring:9090
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: { min: 2, max: 5 }
+    autoscaling: { metricName: http_requests_rate, query: "sum(rate(http_requests_total[1m]))", threshold: "2.00" }
+  mcp:
+    kind: Web
+    port: 3000
+    healthPath: /up
+    replicas: 2
+  sidekiq:
+    kind: Worker
+    command: [bundle, exec, sidekiq]
+    replicas: { min: 2, max: 4 }
+    autoscaling: { metricName: sidekiq_latency_max, query: max(sidekiq_queue_latency_seconds), threshold: "100" }
+  nightly:
+    kind: CronJob
+    schedule: "0 3 * * *"
+    command: [bundle, exec, rake, nightly]
+  migrate-db:
+    kind: Hook
+    phase: PreSync
+    command: [bundle, exec, rake, db:migrate]

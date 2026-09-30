@@ -1,0 +1,76 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: container-requests
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [apps], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [deployments] }
+      - { apiGroups: [batch], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [cronjobs, jobs] }
+  variables:
+    - name: podSpec
+      expression: >-
+        object.kind == 'CronJob' ? object.spec.jobTemplate.spec.template.spec : object.spec.template.spec
+  validations:
+    - expression: >-
+        variables.podSpec.containers.all(c, has(c.resources) && has(c.resources.requests) &&
+        'cpu' in c.resources.requests && 'memory' in c.resources.requests)
+      message: Every container needs cpu and memory requests.
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: serving-probes
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [apps], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [deployments] }
+  validations:
+    - expression: >-
+        object.spec.template.spec.containers.all(c, !has(c.ports) || (has(c.readinessProbe) && has(c.livenessProbe)))
+      message: Containers that serve a port need readiness and liveness probes.
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: hostname-spread
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [apps], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [deployments] }
+  validations:
+    - expression: >-
+        has(object.spec.template.spec.topologySpreadConstraints) &&
+        object.spec.template.spec.topologySpreadConstraints.exists(t, t.topologyKey == 'kubernetes.io/hostname')
+      message: Deployments need a hostname topologySpreadConstraint.
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: two-replicas
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [apps], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [deployments] }
+  validations:
+    - expression: "!has(object.spec.replicas) || object.spec.replicas >= 2"
+      message: Run at least 2 replicas (skipped when an autoscaler owns the count).
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: cron-guardrails
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - { apiGroups: [batch], apiVersions: [v1], operations: [CREATE, UPDATE], resources: [cronjobs] }
+  validations:
+    - expression: >-
+        has(object.spec.concurrencyPolicy) && object.spec.concurrencyPolicy != 'Allow' &&
+        has(object.spec.jobTemplate.spec.activeDeadlineSeconds)
+      message: CronJobs need concurrencyPolicy Forbid or Replace and an activeDeadlineSeconds.
