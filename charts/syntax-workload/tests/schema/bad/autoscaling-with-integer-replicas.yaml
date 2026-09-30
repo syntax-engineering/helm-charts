@@ -1,0 +1,5 @@
+# expect: replicas
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads: { sidekiq: { kind: Worker, replicas: 3, autoscaling: { metricName: m, query: q, threshold: "1" } } }

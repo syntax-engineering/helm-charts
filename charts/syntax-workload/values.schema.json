@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["app", "namespace", "image", "workloads"],
+  "additionalProperties": false,
+  "properties": {
+    "global": { "type": "object" },
+    "app": { "type": "string", "minLength": 1 },
+    "namespace": { "type": "string", "minLength": 1 },
+    "image": { "type": "string", "minLength": 1 },
+    "imagePullSecret": { "type": "string" },
+    "serviceAccount": { "type": "string" },
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "envFrom": { "$ref": "#/$defs/envFrom" },
+    "prometheus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "serverAddress": { "type": "string" } }
+    },
+    "defaults": { "type": "object" },
+    "workloads": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/workload" }
+    }
+  },
+  "$defs": {
+    "envFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configMaps": { "type": "array", "items": { "type": "string" } },
+        "secrets": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "quantities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": { "type": ["string", "number"] },
+        "memory": { "type": "string" }
+      }
+    },
+    "resources": {
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "requests": { "$ref": "#/$defs/quantities" },
+            "limits": { "$ref": "#/$defs/quantities" }
+          }
+        }
+      ]
+    },
+    "replicas": {
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        {
+          "type": "object",
+          "required": ["min", "max"],
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "integer", "minimum": 1 },
+            "max": { "type": "integer", "minimum": 1 },
+            "pinned": { "type": "integer", "minimum": 1, "description": "Keeps spec.replicas on the Deployment alongside KEDA (migration compatibility)" }
+          }
+        }
+      ]
+    },
+    "autoscaling": {
+      "type": "object",
+      "required": ["metricName", "query", "threshold"],
+      "additionalProperties": false,
+      "properties": {
+        "metricName": { "type": "string", "minLength": 1 },
+        "query": { "type": "string", "minLength": 1 },
+        "threshold": { "type": "string", "minLength": 1 },
+        "fallbackReplicas": { "type": "integer", "minimum": 1 },
+        "cooldownPeriod": { "type": "integer", "minimum": 1 },
+        "pollingInterval": { "type": "integer", "minimum": 1 },
+        "behavior": { "type": "boolean", "description": "false drops the scale-down stabilization (migration compatibility)" }
+      }
+    },
+    "vpa": {
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "updateMode": { "enum": ["Off", "Initial", "Recreate", "InPlaceOrRecreate"] },
+            "min": { "$ref": "#/$defs/quantities" },
+            "max": { "$ref": "#/$defs/quantities" }
+          }
+        }
+      ]
+    },
+    "pdb": {
+      "oneOf": [
+        { "const": false },
+        { "type": "object", "required": ["maxUnavailable"], "additionalProperties": false, "properties": { "maxUnavailable": { "type": ["integer", "string"] } } },
+        { "type": "object", "required": ["minAvailable"], "additionalProperties": false, "properties": { "minAvailable": { "type": ["integer", "string"] } } }
+      ]
+    },
+    "strategy": {
+      "oneOf": [
+        { "const": false },
+        { "type": "object", "additionalProperties": false, "properties": { "maxSurge": { "type": ["integer", "string"] }, "maxUnavailable": { "type": ["integer", "string"] } } }
+      ]
+    },
+    "probe": { "oneOf": [{ "const": false }, { "type": "object" }] },
+    "probes": {
+      "oneOf": [
+        { "const": false },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "startup": { "$ref": "#/$defs/probe" },
+            "readiness": { "$ref": "#/$defs/probe" },
+            "liveness": { "$ref": "#/$defs/probe" }
+          }
+        }
+      ]
+    },
+    "offOrInt": { "oneOf": [{ "const": false }, { "type": "integer", "minimum": 0 }] },
+    "workload": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["Web", "Worker", "CronJob", "Hook"] },
+        "enabled": { "type": "boolean" },
+        "fullName": { "type": "string", "minLength": 1 },
+        "containerName": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "command": { "type": "array", "items": { "type": "string" } },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "array", "items": { "type": "object" } },
+        "envFrom": { "$ref": "#/$defs/envFrom" },
+        "serviceAccount": { "type": "string" },
+        "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+        "resources": { "$ref": "#/$defs/resources" },
+        "replicas": { "$ref": "#/$defs/replicas" },
+        "autoscaling": { "$ref": "#/$defs/autoscaling" },
+        "vpa": { "$ref": "#/$defs/vpa" },
+        "pdb": { "$ref": "#/$defs/pdb" },
+        "spread": { "type": "boolean" },
+        "strategy": { "$ref": "#/$defs/strategy" },
+        "names": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pdb": { "type": "string" },
+            "vpa": { "type": "string" },
+            "scaledObject": { "type": "string" }
+          }
+        },
+        "compat": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowSingleReplica": { "type": "boolean" },
+            "bareContainerPort": { "type": "boolean" }
+          }
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "healthPath": { "type": "string", "pattern": "^/" },
+        "probes": { "$ref": "#/$defs/probes" },
+        "serviceName": { "type": "string", "minLength": 1 },
+        "serviceType": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "schedule": { "type": "string", "minLength": 1 },
+        "timeZone": { "type": "string" },
+        "concurrencyPolicy": { "oneOf": [{ "const": false }, { "enum": ["Allow", "Forbid", "Replace"] }] },
+        "successfulJobsHistoryLimit": { "$ref": "#/$defs/offOrInt" },
+        "failedJobsHistoryLimit": { "$ref": "#/$defs/offOrInt" },
+        "activeDeadlineSeconds": { "$ref": "#/$defs/offOrInt" },
+        "phase": { "enum": ["PreSync", "Sync", "PostSync"] },
+        "deletePolicy": { "enum": ["BeforeHookCreation", "HookSucceeded", "HookFailed"] },
+        "backoffLimit": { "type": "integer", "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "Web" } } },
+          "then": {
+            "required": ["port", "replicas"],
+            "if": { "not": { "properties": { "probes": { "const": false } }, "required": ["probes"] } },
+            "then": { "required": ["healthPath"] }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "Worker" } } },
+          "then": { "required": ["replicas"] }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["Web", "Worker"] } } },
+          "then": {
+            "not": { "anyOf": [{ "required": ["schedule"] }, { "required": ["phase"] }] },
+            "if": { "required": ["autoscaling"] },
+            "then": { "properties": { "replicas": { "type": "object" } } },
+            "else": { "properties": { "replicas": { "type": "integer" } } }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["CronJob", "Hook"] } } },
+          "then": {
+            "not": { "anyOf": [{ "required": ["replicas"] }, { "required": ["autoscaling"] }, { "required": ["port"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "CronJob" } } },
+          "then": { "required": ["schedule", "command"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "Hook" } } },
+          "then": { "required": ["phase", "command"] }
+        },
+        {
+          "if": {
+            "not": {
+              "required": ["compat"],
+              "properties": { "compat": { "required": ["allowSingleReplica"], "properties": { "allowSingleReplica": { "const": true } } } }
+            }
+          },
+          "then": {
+            "properties": {
+              "replicas": {
+                "anyOf": [
+                  { "type": "integer", "minimum": 2 },
+                  { "type": "object", "properties": { "min": { "minimum": 2 } } }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

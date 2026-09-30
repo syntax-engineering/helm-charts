@@ -1,0 +1,5 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads:
+  web: { kind: Web, port: 8080, replicas: 2, probes: false }

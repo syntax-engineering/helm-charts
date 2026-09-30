@@ -1,0 +1,5 @@
+apiVersion: v2
+name: syntax-workload
+description: Standard Rails web, worker, cronjob, and deploy-hook workloads for Syntax apps
+type: application
+version: 0.1.0

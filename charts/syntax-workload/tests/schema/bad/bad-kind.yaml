@@ -1,0 +1,5 @@
+# expect: kind
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads: { web: { kind: Webb, replicas: 2 } }

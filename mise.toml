@@ -1,0 +1,8 @@
+[tools]
+helm = "3.18.4"
+kustomize = "5.8.1"
+kyverno = "1.19.1"
+yq = "4.45.4"
+
+[env]
+HELM_UNITTEST_VERSION = "v1.1.2"
