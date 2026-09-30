@@ -1,0 +1,14 @@
+# Separate suite: suite-level values would merge a replicas map into the fixed count.
+suite: Worker kind without autoscaling
+values:
+  - values/worker-fixed.yaml
+tests:
+  - it: sets fixed replicas without autoscaling
+    template: templates/deployment.yaml
+    asserts:
+      - equal: { path: spec.replicas, value: 3 }
+
+  - it: renders no ScaledObject without autoscaling
+    template: templates/scaledobject.yaml
+    asserts:
+      - hasDocuments: { count: 0 }

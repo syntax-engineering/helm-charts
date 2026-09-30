@@ -1,0 +1,26 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (has $w.kind (list "Worker")) (ne $w.enabled false) (not (include "sw.isOff" $w.vpa)) }}
+{{- $c := dict "root" $ "name" $name "w" $w }}
+{{- $v := mergeOverwrite (deepCopy $.Values.defaults.vpa) ($w.vpa | default dict) }}
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: {{ dig "names" "vpa" (printf "%s-vpa" (include "sw.fullname" $c)) $w }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "sw.fullname" $c }}
+  updatePolicy:
+    updateMode: {{ $v.updateMode | quote }}
+  resourcePolicy:
+    containerPolicies:
+      - containerName: {{ $w.containerName | default (include "sw.fullname" $c) }}
+        controlledResources: [cpu, memory]
+        controlledValues: RequestsOnly
+        minAllowed: {{- toYaml $v.min | nindent 10 }}
+        maxAllowed: {{- toYaml $v.max | nindent 10 }}
+{{- end }}
+{{- end }}
