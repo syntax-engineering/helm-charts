@@ -1,0 +1,30 @@
+name: release
+on:
+  push:
+    tags: ["syntax-workload-v*"]
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Set helm-unittest version from mise.toml
+        run: echo "HELM_UNITTEST_VERSION=$(yq -p toml -oy '.env.HELM_UNITTEST_VERSION' mise.toml)" >> "$GITHUB_ENV"
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version "$HELM_UNITTEST_VERSION"
+      - name: Test
+        run: make test
+      - name: Check tag, Chart.yaml, and changelog agree
+        run: |
+          tag="${GITHUB_REF_NAME#syntax-workload-v}"
+          chart=$(yq '.version' charts/syntax-workload/Chart.yaml)
+          [ "$tag" = "$chart" ] || { echo "Tag $tag does not match Chart.yaml version $chart"; exit 1; }
+          grep -q "^## \[$chart\]" charts/syntax-workload/CHANGELOG.md || { echo "CHANGELOG.md has no entry for $chart"; exit 1; }
+      - name: Package and push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm package charts/syntax-workload
+          helm push "syntax-workload-$(yq '.version' charts/syntax-workload/Chart.yaml).tgz" oci://ghcr.io/syntax-engineering/charts

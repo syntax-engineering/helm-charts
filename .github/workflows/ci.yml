@@ -1,0 +1,19 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Set helm-unittest version from mise.toml
+        run: echo "HELM_UNITTEST_VERSION=$(yq -p toml -oy '.env.HELM_UNITTEST_VERSION' mise.toml)" >> "$GITHUB_ENV"
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version "$HELM_UNITTEST_VERSION"
+      - name: Test
+        run: make test
