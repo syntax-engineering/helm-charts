@@ -60,6 +60,9 @@ role: {{ include "sw.role" . }}
     - { resourceName: cpu, restartPolicy: NotRequired }
     - { resourceName: memory, restartPolicy: NotRequired }
   {{- end }}
+  {{- if eq .w.kind "Web" }}
+  {{- include "sw.webContainer" . | nindent 2 }}
+  {{- end }}
 {{- end }}
 
 {{- define "sw.podSpec" -}}
@@ -89,4 +92,29 @@ containers:
 {{- $_ := set $seen $role $name -}}
 {{- end -}}
 {{- end -}}
+{{- end }}
+
+{{/* Ports and probes for Web containers, indented to sit under a container list item. */}}
+{{- define "sw.webContainer" -}}
+ports:
+{{- if dig "compat" "bareContainerPort" false .w }}
+  - containerPort: {{ .w.port }}
+{{- else }}
+  - { containerPort: {{ .w.port }}, name: http, protocol: TCP }
+{{- end }}
+{{- if not (include "sw.isOff" .w.probes) }}
+{{- $get := dict "httpGet" (dict "path" .w.healthPath "port" .w.port "scheme" "HTTP") }}
+{{- $defaults := dict
+  "startupProbe" (merge (dict "failureThreshold" 60 "periodSeconds" 5 "timeoutSeconds" 3) $get)
+  "readinessProbe" (merge (dict "failureThreshold" 2 "periodSeconds" 3 "successThreshold" 1 "timeoutSeconds" 1) $get)
+  "livenessProbe" (merge (dict "failureThreshold" 6 "periodSeconds" 10 "timeoutSeconds" 5) $get) }}
+{{- $keys := dict "startupProbe" "startup" "readinessProbe" "readiness" "livenessProbe" "liveness" }}
+{{- $overrides := .w.probes | default dict }}
+{{- range $field := list "startupProbe" "readinessProbe" "livenessProbe" }}
+{{- $o := get $overrides (get $keys $field) }}
+{{- if not (include "sw.isOff" $o) }}
+{{ $field }}: {{- toYaml (mergeOverwrite (deepCopy (get $defaults $field)) ($o | default dict)) | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}

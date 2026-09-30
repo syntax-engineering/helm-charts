@@ -1,0 +1,15 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+prometheus:
+  serverAddress: http://prometheus.monitoring:9090
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: { min: 2, max: 5 }
+    autoscaling:
+      metricName: http_requests_rate
+      query: sum(rate(http_requests_total[1m]))
+      threshold: "2.00"

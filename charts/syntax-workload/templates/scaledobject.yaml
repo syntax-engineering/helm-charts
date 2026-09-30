@@ -1,5 +1,5 @@
 {{- range $name, $w := .Values.workloads }}
-{{- if and $w.autoscaling (has $w.kind (list "Worker")) (ne $w.enabled false) }}
+{{- if and $w.autoscaling (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) }}
 {{- $c := dict "root" $ "name" $name "w" $w }}
 {{- $a := $w.autoscaling }}
 ---

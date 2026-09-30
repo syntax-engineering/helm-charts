@@ -1,5 +1,5 @@
 {{- range $name, $w := .Values.workloads }}
-{{- if and (has $w.kind (list "Worker")) (ne $w.enabled false) (not (include "sw.isOff" $w.vpa)) }}
+{{- if and (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) (not (include "sw.isOff" $w.vpa)) }}
 {{- $c := dict "root" $ "name" $name "w" $w }}
 {{- $v := mergeOverwrite (deepCopy $.Values.defaults.vpa) ($w.vpa | default dict) }}
 ---

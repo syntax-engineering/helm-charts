@@ -1,6 +1,6 @@
 {{- include "sw.assertUniqueSelectors" . }}
 {{- range $name, $w := .Values.workloads }}
-{{- if and (has $w.kind (list "Worker")) (ne $w.enabled false) }}
+{{- if and (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) }}
 {{- $c := dict "root" $ "name" $name "w" $w }}
 ---
 apiVersion: apps/v1
