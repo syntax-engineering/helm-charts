@@ -1,0 +1,86 @@
+suite: values schema
+templates:
+  - templates/deployment.yaml
+  - templates/service.yaml
+  - templates/pdb.yaml
+  - templates/vpa.yaml
+  - templates/scaledobject.yaml
+  - templates/cronjob.yaml
+  - templates/hook.yaml
+tests:
+  # Valid values render.
+  - it: accepts an autoscaled Web workload
+    values: [schema/good/autoscaled-web.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts a CronJob and a Hook
+    values: [schema/good/cron-and-hook.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts a minimal Worker
+    values: [schema/good/minimal-worker.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts one replica when compat.allowSingleReplica is set
+    values: [schema/good/single-replica-compat.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: accepts a Web workload with probes turned off
+    values: [schema/good/web-without-probes.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  # Invalid values fail with a message naming the problem.
+  - it: rejects integer replicas when autoscaling is set
+    values: [schema/bad/autoscaling-with-integer-replicas.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/sidekiq/replicas.: got number, want object' }
+
+  - it: rejects an unknown Hook phase
+    values: [schema/bad/bad-hook-phase.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/migrate/phase.: value must be one of .PreSync., .Sync., .PostSync.' }
+
+  - it: rejects an unknown kind
+    values: [schema/bad/bad-kind.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/web/kind.: value must be one of .Web., .Worker., .CronJob., .Hook.' }
+
+  - it: rejects replicas on a CronJob
+    values: [schema/bad/cron-with-replicas.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/nightly.: .not. failed' }
+
+  - it: rejects an empty app name
+    values: [schema/bad/missing-app.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/app.: minLength: got 0, want 1' }
+
+  - it: rejects fewer than two replicas without the compat setting
+    values: [schema/bad/single-replica.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/sidekiq/replicas/min.: minimum: got 1, want 2' }
+
+  - it: rejects an unknown top-level field
+    values: [schema/bad/unknown-top-level.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'additional properties .imagePullSecrets. not allowed' }
+
+  - it: rejects an unknown workload field
+    values: [schema/bad/unknown-workload-field.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/sidekiq.: additional properties .replica. not allowed' }
+
+  - it: requires healthPath on a Web workload with probes
+    values: [schema/bad/web-missing-health-path.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/web.: missing property .healthPath.' }
+
+  - it: requires port on a Web workload
+    values: [schema/bad/web-missing-port.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/web.: missing property .port.' }

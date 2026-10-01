@@ -1,0 +1,70 @@
+suite: every Deployment in the standard fixture has a PDB and a VPA
+values:
+  - values/standard.yaml
+tests:
+  - it: renders one PDB and one VPA per Deployment
+    templates: [templates/deployment.yaml, templates/pdb.yaml, templates/vpa.yaml]
+    asserts:
+      - hasDocuments: { count: 3 }
+        template: templates/deployment.yaml
+      - hasDocuments: { count: 3 }
+        template: templates/pdb.yaml
+      - hasDocuments: { count: 3 }
+        template: templates/vpa.yaml
+
+  # web
+  - it: the web Deployment selects app=acme, role=web
+    template: templates/deployment.yaml
+    documentSelector: { path: metadata.name, value: acme-web }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: web } }
+
+  - it: the web PDB selects the web Deployment's pods
+    template: templates/pdb.yaml
+    documentSelector: { path: metadata.name, value: acme-web-pdb }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: web } }
+
+  - it: the web VPA targets the web Deployment
+    template: templates/vpa.yaml
+    documentSelector: { path: metadata.name, value: acme-web-vpa }
+    asserts:
+      - equal: { path: spec.targetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-web } }
+
+  # mcp
+  - it: the mcp Deployment selects app=acme, role=mcp
+    template: templates/deployment.yaml
+    documentSelector: { path: metadata.name, value: acme-mcp }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: mcp } }
+
+  - it: the mcp PDB selects the mcp Deployment's pods
+    template: templates/pdb.yaml
+    documentSelector: { path: metadata.name, value: acme-mcp-pdb }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: mcp } }
+
+  - it: the mcp VPA targets the mcp Deployment
+    template: templates/vpa.yaml
+    documentSelector: { path: metadata.name, value: acme-mcp-vpa }
+    asserts:
+      - equal: { path: spec.targetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-mcp } }
+
+  # sidekiq
+  - it: the sidekiq Deployment selects app=acme, role=sidekiq
+    template: templates/deployment.yaml
+    documentSelector: { path: metadata.name, value: acme-sidekiq }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: sidekiq } }
+
+  - it: the sidekiq PDB selects the sidekiq Deployment's pods
+    template: templates/pdb.yaml
+    documentSelector: { path: metadata.name, value: acme-sidekiq-pdb }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: sidekiq } }
+
+  - it: the sidekiq VPA targets the sidekiq Deployment
+    template: templates/vpa.yaml
+    documentSelector: { path: metadata.name, value: acme-sidekiq-vpa }
+    asserts:
+      - equal: { path: spec.targetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-sidekiq } }

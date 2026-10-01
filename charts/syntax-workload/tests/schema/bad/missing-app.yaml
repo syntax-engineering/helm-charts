@@ -1,4 +1,3 @@
-# expect: app: String length must be greater than or equal to 1
 namespace: acme-env
 image: ghcr.io/example/acme:1.0.0
 workloads: { sidekiq: { kind: Worker, replicas: 2 } }

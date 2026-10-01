@@ -11,7 +11,7 @@ Shared Helm charts for Syntax workloads. Each chart lives in `charts/<name>/` an
 
     mise install
     helm plugin install https://github.com/helm-unittest/helm-unittest --version "$HELM_UNITTEST_VERSION"
-    make test
+    just test
 
 ## Releasing
 

@@ -1,0 +1,26 @@
+# Deliberately non-compliant resources; every policy must reject them.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: bad-web, namespace: acme-env }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: bad } }
+  template:
+    metadata: { labels: { app: bad } }
+    spec:
+      containers:
+        - name: app
+          image: example/bad:1
+          ports: [{ containerPort: 80 }]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: bad-cron, namespace: acme-env }
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers: [{ name: c, image: example/bad:1 }]
