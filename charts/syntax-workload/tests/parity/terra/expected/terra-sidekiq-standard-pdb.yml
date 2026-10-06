@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: terra-sidekiq-standard-pdb
+  namespace: terra-env
+spec:
+  # Keep one pod serving through a node drain. Must stay below the replica count:
+  # equal to it makes the budget unsatisfiable and stalls the drain.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: terra
+      role: sidekiq-standard

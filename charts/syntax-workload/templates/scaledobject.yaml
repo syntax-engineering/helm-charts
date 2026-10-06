@@ -1,0 +1,40 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and $w.autoscaling (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) }}
+{{- $c := dict "root" $ "name" $name "w" $w }}
+{{- $a := $w.autoscaling }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ dig "names" "scaledObject" (printf "%s-hpa" (include "sw.fullname" $c)) $w }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "sw.fullname" $c }}
+  minReplicaCount: {{ $w.replicas.min }}
+  maxReplicaCount: {{ $w.replicas.max }}
+  {{- with $a.cooldownPeriod }}
+  cooldownPeriod: {{ . }}
+  {{- end }}
+  {{- with $a.pollingInterval }}
+  pollingInterval: {{ . }}
+  {{- end }}
+  fallback:
+    failureThreshold: 3
+    replicas: {{ $a.fallbackReplicas | default $w.replicas.min }}
+  {{- if ne $a.behavior false }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ $.Values.defaults.scaleDownStabilizationSeconds }}
+  {{- end }}
+  triggers:
+    - type: prometheus
+      name: {{ $a.metricName }}
+      metadata:
+        serverAddress: {{ required "prometheus.serverAddress is required when a workload autoscales" $.Values.prometheus.serverAddress }}
+        query: {{ $a.query | quote }}
+        threshold: {{ $a.threshold | quote }}
+{{- end }}
+{{- end }}

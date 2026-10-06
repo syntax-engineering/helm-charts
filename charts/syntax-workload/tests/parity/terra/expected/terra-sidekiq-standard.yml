@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: terra-sidekiq-standard
+  namespace: terra-env
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: terra
+      role: sidekiq-standard
+  template:
+    metadata:
+      labels:
+        app: terra
+        role: sidekiq-standard
+    spec:
+      # Spread this role across nodes so one node loss (usually a DOKS auto-upgrade
+      # drain) cannot take out the whole role. Soft, so pods still schedule when the
+      # cluster cannot spread them; matchLabelKeys keeps rolling updates from measuring
+      # skew against the outgoing ReplicaSet.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          matchLabelKeys:
+            - pod-template-hash
+          labelSelector:
+            matchLabels:
+              app: terra
+              role: sidekiq-standard
+      imagePullSecrets:
+        - name: terra-registry-secret
+      containers:
+        - name: terra-sidekiq-standard
+          image: ghcr.io/syntax-engineering/terra:latest
+          command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+          envFrom:
+            - secretRef:
+                name: terra-app-secrets
+            - secretRef:
+                name: terra-terraform-secrets
+          # These match the web Deployment values set in the previous Kuby deploy.
+          # Sidekiq had no resource limits before — revisit if we see OOM or throttling.
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 500m
+            limits:
+              memory: 2Gi
+              cpu: 1000m
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: NotRequired

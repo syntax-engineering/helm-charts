@@ -1,0 +1,9 @@
+[tools]
+helm = "3.18.4"
+just = "1.52.0"
+kyverno = "1.19.1"
+ruby = "3.3.6"
+yq = "4.45.4"
+
+[env]
+HELM_UNITTEST_VERSION = "v1.1.2"

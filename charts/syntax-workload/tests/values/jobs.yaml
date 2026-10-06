@@ -1,0 +1,15 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+imagePullSecret: acme-registry
+envFrom:
+  secrets: [acme-secrets]
+workloads:
+  nightly:
+    kind: CronJob
+    schedule: "0 3 * * *"
+    command: [bundle, exec, rake, nightly]
+  migrate-db:
+    kind: Hook
+    phase: PreSync
+    command: [bundle, exec, rake, db:migrate]

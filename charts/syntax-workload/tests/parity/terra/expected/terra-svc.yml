@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: terra-svc
+  namespace: terra-env
+spec:
+  selector:
+    app: terra
+    role: web
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

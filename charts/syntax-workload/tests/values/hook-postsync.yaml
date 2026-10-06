@@ -1,0 +1,13 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads:
+  integration-tests:
+    kind: Hook
+    phase: PostSync
+    deletePolicy: HookSucceeded
+    backoffLimit: 2
+    image: curlimages/curl
+    command: [sh, -c]
+    args: ["curl -X POST https://example.com/dispatch"]
+    env: [{ name: TOKEN, valueFrom: { secretKeyRef: { name: acme-secrets, key: token } } }]

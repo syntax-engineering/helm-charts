@@ -1,0 +1,231 @@
+suite: Worker kind
+values:
+  - values/worker.yaml
+tests:
+  - it: renders one Deployment named <app>-<name> in the namespace
+    template: templates/deployment.yaml
+    asserts:
+      - hasDocuments: { count: 1 }
+      - isKind: { of: Deployment }
+      - equal: { path: metadata.name, value: acme-sidekiq }
+      - equal: { path: metadata.namespace, value: acme-env }
+      - notExists: { path: metadata.labels }
+
+  - it: selects pods by app and role only
+    template: templates/deployment.yaml
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: sidekiq } }
+      - equal: { path: spec.template.metadata.labels, value: { app: acme, role: sidekiq } }
+
+  - it: leaves replicas to KEDA when autoscaling
+    template: templates/deployment.yaml
+    asserts:
+      - notExists: { path: spec.replicas }
+
+  - it: pins replicas when replicas.pinned is set
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.replicas.pinned: 2 }
+    asserts:
+      - equal: { path: spec.replicas, value: 2 }
+
+  - it: uses the default rolling update strategy
+    template: templates/deployment.yaml
+    asserts:
+      - equal: { path: spec.strategy, value: { type: RollingUpdate, rollingUpdate: { maxSurge: 25%, maxUnavailable: 0 } } }
+
+  - it: omits the strategy when strategy is false
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.strategy: false }
+    asserts:
+      - notExists: { path: spec.strategy }
+
+  - it: spreads pods softly across nodes
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints
+          value:
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: ScheduleAnyway
+              matchLabelKeys: [pod-template-hash]
+              labelSelector: { matchLabels: { app: acme, role: sidekiq } }
+
+  - it: omits spread when spread is false
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.spread: false }
+    asserts:
+      - notExists: { path: spec.template.spec.topologySpreadConstraints }
+
+  - it: builds the container from app-wide fields and defaults
+    template: templates/deployment.yaml
+    asserts:
+      - equal: { path: spec.template.spec.imagePullSecrets, value: [{ name: acme-registry }] }
+      - equal: { path: "spec.template.spec.containers[0].name", value: acme-sidekiq }
+      - equal: { path: "spec.template.spec.containers[0].image", value: ghcr.io/example/acme:1.0.0 }
+      - equal: { path: "spec.template.spec.containers[0].command", value: [bundle, exec, sidekiq] }
+      - equal:
+          path: "spec.template.spec.containers[0].envFrom"
+          value: [{ configMapRef: { name: acme-config } }, { secretRef: { name: acme-secrets } }]
+      - equal:
+          path: "spec.template.spec.containers[0].resources"
+          value: { requests: { cpu: 1000m, memory: 2Gi }, limits: { cpu: 2000m, memory: 4Gi } }
+      - notExists: { path: "spec.template.spec.containers[0].imagePullPolicy" }
+      - notExists: { path: "spec.template.spec.containers[0].ports" }
+      - notExists: { path: spec.template.spec.serviceAccountName }
+
+  - it: omits resources and resizePolicy when resources is false
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.resources: false }
+    asserts:
+      - notExists: { path: "spec.template.spec.containers[0].resources" }
+      - notExists: { path: "spec.template.spec.containers[0].resizePolicy" }
+
+  - it: applies app-wide serviceAccount and nodeSelector, with per-workload override
+    template: templates/deployment.yaml
+    set:
+      serviceAccount: acme-sa
+      nodeSelector: { pool: apps }
+      workloads.sidekiq.serviceAccount: acme-sidekiq-sa
+    asserts:
+      - equal: { path: spec.template.spec.serviceAccountName, value: acme-sidekiq-sa }
+      - equal: { path: spec.template.spec.nodeSelector, value: { pool: apps } }
+
+  # Review Focus: env override merges instead of replacing.
+  - it: deep-merges an environment values file over the base workload
+    template: templates/deployment.yaml
+    values:
+      - values/worker.yaml
+      - values/worker-env-override.yaml
+    asserts:
+      - equal: { path: "spec.template.spec.containers[0].command", value: [bundle, exec, sidekiq] }
+      # Review Focus: partial resources keep default limits.
+      - equal:
+          path: "spec.template.spec.containers[0].resources"
+          value: { requests: { cpu: 250m, memory: 2Gi }, limits: { cpu: 2000m, memory: 4Gi } }
+
+  - it: renders nothing for a workload with enabled false
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.enabled: false }
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  # Review Focus: duplicate roles fail loudly.
+  - it: fails when two Deployment workloads share a role
+    template: templates/deployment.yaml
+    set:
+      workloads.critical: { kind: Worker, role: sidekiq, replicas: 2 }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'workloads "sidekiq" and "critical" both select role=sidekiq'
+
+  - it: fails when a CronJob shares a role with a Deployment workload
+    template: templates/deployment.yaml
+    set:
+      workloads.sweep: { kind: CronJob, role: sidekiq, schedule: "0 * * * *", command: [bundle, exec, rake, sweep] }
+    asserts:
+      - failedTemplate:
+          errorPattern: 'both select role=sidekiq'
+
+  - it: keeps the default maxUnavailable when a strategy override sets only maxSurge
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.strategy: { maxSurge: 1 } }
+    asserts:
+      - equal: { path: spec.strategy.rollingUpdate, value: { maxSurge: 1, maxUnavailable: 0 } }
+
+  - it: renders a PDB with maxUnavailable 1 by default
+    template: templates/pdb.yaml
+    asserts:
+      - hasDocuments: { count: 1 }
+      - equal: { path: metadata.name, value: acme-sidekiq-pdb }
+      - equal: { path: spec, value: { maxUnavailable: 1, selector: { matchLabels: { app: acme, role: sidekiq } } } }
+
+  - it: replaces the PDB budget with minAvailable when set
+    template: templates/pdb.yaml
+    set: { workloads.sidekiq.pdb: { minAvailable: 1 } }
+    asserts:
+      - equal: { path: spec.minAvailable, value: 1 }
+      - notExists: { path: spec.maxUnavailable }
+
+  - it: omits the PDB when pdb is false
+    template: templates/pdb.yaml
+    set: { workloads.sidekiq.pdb: false }
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: renames the PDB with names.pdb
+    template: templates/pdb.yaml
+    set: { workloads.sidekiq.names.pdb: legacy-pdb }
+    asserts:
+      - equal: { path: metadata.name, value: legacy-pdb }
+
+  - it: renders a recommendation-only VPA with default bounds
+    template: templates/vpa.yaml
+    asserts:
+      - equal: { path: metadata.name, value: acme-sidekiq-vpa }
+      - equal: { path: spec.targetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-sidekiq } }
+      - equal: { path: spec.updatePolicy.updateMode, value: "Off" }
+      - equal:
+          path: "spec.resourcePolicy.containerPolicies[0]"
+          value:
+            containerName: acme-sidekiq
+            controlledResources: [cpu, memory]
+            controlledValues: RequestsOnly
+            minAllowed: { cpu: 500m, memory: 1Gi }
+            maxAllowed: { cpu: 4000m, memory: 8Gi }
+
+  - it: merges VPA overrides over the defaults
+    template: templates/vpa.yaml
+    set: { workloads.sidekiq.vpa: { max: { memory: 3500Mi } } }
+    asserts:
+      - equal: { path: "spec.resourcePolicy.containerPolicies[0].maxAllowed", value: { cpu: 4000m, memory: 3500Mi } }
+
+  - it: omits the VPA when vpa is false
+    template: templates/vpa.yaml
+    set: { workloads.sidekiq.vpa: false }
+    asserts:
+      - hasDocuments: { count: 0 }
+
+  - it: renders a KEDA ScaledObject with fallback and scale-down stabilization
+    template: templates/scaledobject.yaml
+    asserts:
+      - equal: { path: metadata.name, value: acme-sidekiq-hpa }
+      - equal: { path: spec.scaleTargetRef.name, value: acme-sidekiq }
+      - equal: { path: spec.minReplicaCount, value: 2 }
+      - equal: { path: spec.maxReplicaCount, value: 4 }
+      - equal: { path: spec.fallback, value: { failureThreshold: 3, replicas: 2 } }
+      - equal:
+          path: spec.advanced.horizontalPodAutoscalerConfig.behavior.scaleDown.stabilizationWindowSeconds
+          value: 300
+      - notExists: { path: spec.cooldownPeriod }
+      - notExists: { path: spec.pollingInterval }
+      - equal:
+          path: spec.triggers
+          value:
+            - type: prometheus
+              name: sidekiq_latency_max
+              metadata:
+                serverAddress: http://prometheus.monitoring:9090
+                query: max(sidekiq_queue_latency_seconds)
+                threshold: "100"
+
+  - it: emits compatibility KEDA fields only when set
+    template: templates/scaledobject.yaml
+    set:
+      workloads.sidekiq.autoscaling.cooldownPeriod: 1500
+      workloads.sidekiq.autoscaling.pollingInterval: 20
+      workloads.sidekiq.autoscaling.fallbackReplicas: 3
+      workloads.sidekiq.autoscaling.behavior: false
+    asserts:
+      - equal: { path: spec.cooldownPeriod, value: 1500 }
+      - equal: { path: spec.pollingInterval, value: 20 }
+      - equal: { path: spec.fallback.replicas, value: 3 }
+      - notExists: { path: spec.advanced }
+
+  # Review Focus: autoscaling without a Prometheus address fails with a clear message.
+  - it: fails when autoscaling has no prometheus.serverAddress
+    template: templates/scaledobject.yaml
+    set: { prometheus.serverAddress: "" }
+    asserts:
+      - failedTemplate:
+          errorPattern: "prometheus.serverAddress is required when a workload autoscales"

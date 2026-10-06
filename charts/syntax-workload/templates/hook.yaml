@@ -1,0 +1,22 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (eq $w.kind "Hook") (ne $w.enabled false) }}
+{{- $c := dict "root" $ "name" $name "w" $w }}
+{{- $d := $.Values.defaults.hook }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "sw.fullname" $c }}
+  namespace: {{ $.Values.namespace }}
+  annotations:
+    argocd.argoproj.io/hook: {{ $w.phase }}
+    argocd.argoproj.io/hook-delete-policy: {{ $w.deletePolicy | default $d.deletePolicy }}
+spec:
+  backoffLimit: {{ hasKey $w "backoffLimit" | ternary $w.backoffLimit $d.backoffLimit }}
+  {{- include "sw.opt" (dict "from" $w "key" "activeDeadlineSeconds" "default" $d.activeDeadlineSeconds) | nindent 2 }}
+  template:
+    spec:
+      {{- include "sw.podSpec" $c | nindent 6 }}
+      restartPolicy: Never
+{{- end }}
+{{- end }}

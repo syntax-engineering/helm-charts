@@ -1,0 +1,4 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads: { nightly: { kind: CronJob, schedule: "0 3 * * *", command: [rake, x], replicas: 2 } }

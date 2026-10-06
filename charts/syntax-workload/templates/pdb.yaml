@@ -1,0 +1,15 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) (not (include "sw.isOff" $w.pdb)) }}
+{{- $c := dict "root" $ "name" $name "w" $w }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ dig "names" "pdb" (printf "%s-pdb" (include "sw.fullname" $c)) $w }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  {{- toYaml ($w.pdb | default $.Values.defaults.pdb) | nindent 2 }}
+  selector:
+    matchLabels: {{- include "sw.selector" $c | nindent 6 }}
+{{- end }}
+{{- end }}

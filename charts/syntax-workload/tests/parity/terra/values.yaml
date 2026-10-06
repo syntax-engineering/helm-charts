@@ -1,0 +1,80 @@
+app: terra
+namespace: terra-env
+image: ghcr.io/syntax-engineering/terra:latest
+imagePullSecret: terra-registry-secret
+envFrom:
+  secrets: [terra-app-secrets, terra-terraform-secrets]
+prometheus:
+  serverAddress: http://kube-prometheus-stack-terr-prometheus.kube-prometheus-stack:9090
+
+workloads:
+  web:
+    kind: Web
+    serviceName: terra-svc
+    port: 8080
+    probes: false
+    strategy: false
+    compat: { bareContainerPort: true }
+    replicas: { min: 2, max: 5, pinned: 2 }
+    autoscaling:
+      metricName: http_requests_rate
+      query: sum(rate(http_requests_total{path!~"(/healthz|/metrics|/ahoy/events|/users/sign_in/metrics|/|/events)$"}[1m]))
+      threshold: "2.00"
+      fallbackReplicas: 3
+      cooldownPeriod: 600
+      behavior: false
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: 1000m, memory: 2Gi }
+    vpa:
+      min: { cpu: 500m, memory: 1Gi }
+      max: { cpu: 2500m, memory: 3500Mi }
+    pdb: { minAvailable: 1 }
+
+  sidekiq-standard:
+    kind: Worker
+    command: [bundle, exec, sidekiq, -C, config/sidekiq.yml]
+    strategy: false
+    replicas: { min: 2, max: 4, pinned: 2 }
+    autoscaling:
+      metricName: sidekiq_latency_max
+      query: max(sidekiq_queue_latency_seconds)
+      threshold: "1000"
+      cooldownPeriod: 1500
+      pollingInterval: 20
+      behavior: false
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: 1000m, memory: 2Gi }
+    vpa:
+      min: { cpu: 500m, memory: 1Gi }
+      max: { cpu: 1300m, memory: 3500Mi }
+    pdb: { minAvailable: 1 }
+
+  sidekiq-critical:
+    kind: Worker
+    command: [bundle, exec, sidekiq, -C, config/sidekiq-critical.yml]
+    strategy: false
+    replicas: { min: 2, max: 4, pinned: 2 }
+    autoscaling:
+      metricName: sidekiq_latency_max
+      query: max(sidekiq_queue_latency_seconds)
+      threshold: "1000"
+      cooldownPeriod: 1500
+      pollingInterval: 20
+      behavior: false
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: 1000m, memory: 2Gi }
+    vpa:
+      min: { cpu: 500m, memory: 1Gi }
+      max: { cpu: 1300m, memory: 3500Mi }
+    pdb: { minAvailable: 1 }
+
+  migrate-db:
+    kind: Hook
+    phase: PreSync
+    containerName: migrate
+    command: [bundle, exec, rake, db:migrate]
+    resources: false
+    activeDeadlineSeconds: false

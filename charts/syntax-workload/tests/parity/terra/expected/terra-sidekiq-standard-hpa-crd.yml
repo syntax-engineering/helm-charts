@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: terra-sidekiq-standard-hpa
+  namespace: terra-env
+spec:
+  cooldownPeriod: 1500
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  maxReplicaCount: 4
+  minReplicaCount: 2
+  pollingInterval: 20
+  scaleTargetRef:
+    name: terra-sidekiq-standard
+  triggers:
+    - metadata:
+        query: max(sidekiq_queue_latency_seconds)
+        serverAddress: >-
+          http://kube-prometheus-stack-terr-prometheus.kube-prometheus-stack:9090
+        threshold: "1000"
+      type: prometheus
+      name: sidekiq_latency_max

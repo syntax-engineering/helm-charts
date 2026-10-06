@@ -1,0 +1,29 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (eq $w.kind "CronJob") (ne $w.enabled false) }}
+{{- $c := dict "root" $ "name" $name "w" $w }}
+{{- $d := $.Values.defaults.cron }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "sw.fullname" $c }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  schedule: {{ $w.schedule | quote }}
+  {{- with $w.timeZone }}
+  timeZone: {{ . }}
+  {{- end }}
+  {{- include "sw.opt" (dict "from" $w "key" "concurrencyPolicy" "default" $d.concurrencyPolicy) | nindent 2 }}
+  {{- include "sw.opt" (dict "from" $w "key" "successfulJobsHistoryLimit" "default" $d.successfulJobsHistoryLimit) | nindent 2 }}
+  {{- include "sw.opt" (dict "from" $w "key" "failedJobsHistoryLimit" "default" $d.failedJobsHistoryLimit) | nindent 2 }}
+  jobTemplate:
+    spec:
+      {{- include "sw.opt" (dict "from" $w "key" "activeDeadlineSeconds" "default" $d.activeDeadlineSeconds) | nindent 6 }}
+      template:
+        metadata:
+          labels: {{- include "sw.selector" $c | nindent 12 }}
+        spec:
+          {{- include "sw.podSpec" $c | nindent 10 }}
+          restartPolicy: Never
+{{- end }}
+{{- end }}

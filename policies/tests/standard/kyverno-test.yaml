@@ -1,0 +1,98 @@
+# Declared policy results: the standard fixture passes every policy, bad.yaml fails each one.
+# rendered.yaml is written by `just policy` from tests/values/standard.yaml.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workload-standards
+policies:
+  - ../../workload-standards.yaml
+resources:
+  - rendered.yaml
+  - bad.yaml
+results:
+  - policy: container-requests
+    kind: Deployment
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-web }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-mcp }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-sidekiq }
+  - policy: container-requests
+    kind: CronJob
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: batch, version: v1, kind: CronJob, namespace: acme-env, name: acme-nightly }
+  - policy: container-requests
+    kind: Job
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: batch, version: v1, kind: Job, namespace: acme-env, name: acme-migrate-db }
+  - policy: serving-probes
+    kind: Deployment
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-web }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-mcp }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-sidekiq }
+  - policy: hostname-spread
+    kind: Deployment
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-web }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-mcp }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-sidekiq }
+  - policy: two-replicas
+    kind: Deployment
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-web }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-mcp }
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: acme-sidekiq }
+  - policy: cron-guardrails
+    kind: CronJob
+    result: pass
+    resources: []
+    resourceSpecs:
+      - { group: batch, version: v1, kind: CronJob, namespace: acme-env, name: acme-nightly }
+  - policy: container-requests
+    kind: Deployment
+    result: fail
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: bad-web }
+  - policy: container-requests
+    kind: CronJob
+    result: fail
+    resources: []
+    resourceSpecs:
+      - { group: batch, version: v1, kind: CronJob, namespace: acme-env, name: bad-cron }
+  - policy: serving-probes
+    kind: Deployment
+    result: fail
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: bad-web }
+  - policy: hostname-spread
+    kind: Deployment
+    result: fail
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: bad-web }
+  - policy: two-replicas
+    kind: Deployment
+    result: fail
+    resources: []
+    resourceSpecs:
+      - { group: apps, version: v1, kind: Deployment, namespace: acme-env, name: bad-web }
+  - policy: cron-guardrails
+    kind: CronJob
+    result: fail
+    resources: []
+    resourceSpecs:
+      - { group: batch, version: v1, kind: CronJob, namespace: acme-env, name: bad-cron }
