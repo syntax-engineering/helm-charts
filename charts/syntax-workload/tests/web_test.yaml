@@ -95,3 +95,9 @@ tests:
     set: { workloads.web.selectorLabels: { tier: frontend } }
     asserts:
       - equal: { path: spec.selector, value: { app: acme, role: web, tier: frontend } }
+
+  - it: labels the Service with its selector
+    template: templates/service.yaml
+    set: { workloads.web.selectorLabels: { tier: frontend } }
+    asserts:
+      - equal: { path: metadata.labels, value: { app: acme, role: web, tier: frontend } }
