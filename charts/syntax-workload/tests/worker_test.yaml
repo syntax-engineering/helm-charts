@@ -119,12 +119,13 @@ tests:
       - failedTemplate:
           errorPattern: 'workloads "critical" and "sidekiq" have the same selector'
 
-  - it: allows a CronJob to share a role with a Deployment workload
+  - it: fails when a CronJob shares a role with a Deployment workload
     template: templates/deployment.yaml
     set:
       workloads.sweep: { kind: CronJob, role: sidekiq, schedule: "0 * * * *", command: [bundle, exec, rake, sweep] }
     asserts:
-      - notFailedTemplate: {}
+      - failedTemplate:
+          errorPattern: 'CronJob workload "sweep" has pod labels that match the selector of workload "sidekiq"'
 
   - it: keeps the default maxUnavailable when a strategy override sets only maxSurge
     template: templates/deployment.yaml

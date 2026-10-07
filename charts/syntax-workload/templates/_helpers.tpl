@@ -80,16 +80,38 @@ containers:
 {{- include "sw.container" . | nindent 2 }}
 {{- end }}
 
-{{/* Fails the render when two Deployment workloads would select the same pods. */}}
+{{/*
+Fails the render when two enabled Deployment workloads would select the same
+pods, or when a Deployment workload's selector would also match a CronJob's
+pods. CronJobs may share a selector with each other. Hooks carry no labels.
+*/}}
 {{- define "sw.assertUniqueSelectors" -}}
 {{- $seen := dict -}}
+{{- $deployments := dict -}}
+{{- $crons := dict -}}
 {{- range $name, $w := .Values.workloads -}}
-{{- if and (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) -}}
+{{- if ne $w.enabled false -}}
+{{- if has $w.kind (list "Web" "Worker") -}}
 {{- $selector := include "sw.selector" (dict "root" $ "name" $name "w" $w) -}}
 {{- if hasKey $seen $selector -}}
 {{- fail (printf "workloads %q and %q have the same selector (%s); give one of them a different role or selectorLabels" (get $seen $selector) $name ($selector | replace "\n" ", ")) -}}
 {{- end -}}
 {{- $_ := set $seen $selector $name -}}
+{{- $_ := set $deployments $name (fromYaml $selector) -}}
+{{- else if eq $w.kind "CronJob" -}}
+{{- $_ := set $crons $name (fromYaml (include "sw.selector" (dict "root" $ "name" $name "w" $w))) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- range $cname, $labels := $crons -}}
+{{- range $dname, $sel := $deployments -}}
+{{- $match := dict "all" true -}}
+{{- range $k, $v := $sel -}}
+{{- if ne (get $labels $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
+{{- end -}}
+{{- if get $match "all" -}}
+{{- fail (printf "CronJob workload %q has pod labels that match the selector of workload %q; give one of them a different role or selectorLabels" $cname $dname) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end }}

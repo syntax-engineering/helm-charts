@@ -6,12 +6,14 @@ templates:
   - templates/cronjob.yaml
 tests:
   - it: allows workers that share a role but differ in selectorLabels
+    template: templates/deployment.yaml
     set:
       workloads.sidekiq.role: worker
       workloads.sidekiq.selectorLabels: { priority: default }
       workloads.xlow: { kind: Worker, role: worker, selectorLabels: { priority: xlow }, command: [sidekiq], replicas: 2 }
     asserts:
       - notFailedTemplate: {}
+      - hasDocuments: { count: 2 }
 
   - it: rejects two workers with the same full selector
     template: templates/deployment.yaml
@@ -29,8 +31,27 @@ tests:
       - notFailedTemplate: {}
 
   - it: allows CronJobs that share a role
+    template: templates/cronjob.yaml
     set:
       workloads.a: { kind: CronJob, role: cron-job, schedule: "0 1 * * *", command: [rake, a] }
       workloads.b: { kind: CronJob, role: cron-job, schedule: "0 2 * * *", command: [rake, b] }
+    asserts:
+      - notFailedTemplate: {}
+      - hasDocuments: { count: 2 }
+
+  - it: allows a CronJob whose labels are not a superset of any Deployment selector
+    template: templates/cronjob.yaml
+    set:
+      workloads.sidekiq.role: worker
+      workloads.sweep: { kind: CronJob, role: worker, selectorLabels: { priority: other }, schedule: "0 * * * *", command: [rake, sweep] }
+      workloads.sidekiq.selectorLabels: { priority: default }
+    asserts:
+      - notFailedTemplate: {}
+      - hasDocuments: { count: 1 }
+
+  - it: ignores a disabled CronJob when checking against Deployments
+    template: templates/deployment.yaml
+    set:
+      workloads.sweep: { kind: CronJob, role: sidekiq, schedule: "0 * * * *", command: [rake, sweep], enabled: false }
     asserts:
       - notFailedTemplate: {}
