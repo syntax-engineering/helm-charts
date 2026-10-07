@@ -54,6 +54,9 @@
     - secretRef: { name: {{ . }} }
     {{- end }}
   {{- end }}
+  {{- with .w.volumeMounts }}
+  volumeMounts: {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with include "sw.resources" . }}
   resources: {{- . | nindent 4 }}
   resizePolicy:
@@ -83,6 +86,9 @@ imagePullSecrets:
 {{- end }}
 containers:
 {{- include "sw.container" . | nindent 2 }}
+{{- with .w.volumes }}
+volumes: {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 
 {{/*
