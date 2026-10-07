@@ -10,8 +10,8 @@
 {{- end }}
 
 {{- define "sw.selector" -}}
-app: {{ .root.Values.app }}
-role: {{ include "sw.role" . }}
+{{- $labels := dict "app" .root.Values.app "role" (include "sw.role" .) -}}
+{{- toYaml (merge $labels (.w.selectorLabels | default dict)) -}}
 {{- end }}
 
 {{/* "true" when the value is the boolean false, which turns a default off. */}}
@@ -84,12 +84,12 @@ containers:
 {{- define "sw.assertUniqueSelectors" -}}
 {{- $seen := dict -}}
 {{- range $name, $w := .Values.workloads -}}
-{{- if and (has $w.kind (list "Web" "Worker" "CronJob")) (ne $w.enabled false) -}}
-{{- $role := $w.role | default $name -}}
-{{- if hasKey $seen $role -}}
-{{- fail (printf "workloads %q and %q both select role=%s; give one of them a different role" $name (get $seen $role) $role) -}}
+{{- if and (has $w.kind (list "Web" "Worker")) (ne $w.enabled false) -}}
+{{- $selector := include "sw.selector" (dict "root" $ "name" $name "w" $w) -}}
+{{- if hasKey $seen $selector -}}
+{{- fail (printf "workloads %q and %q have the same selector (%s); give one of them a different role or selectorLabels" (get $seen $selector) $name ($selector | replace "\n" ", ")) -}}
 {{- end -}}
-{{- $_ := set $seen $role $name -}}
+{{- $_ := set $seen $selector $name -}}
 {{- end -}}
 {{- end -}}
 {{- end }}

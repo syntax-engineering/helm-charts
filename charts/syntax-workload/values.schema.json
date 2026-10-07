@@ -135,6 +135,12 @@
         "fullName": { "type": "string", "minLength": 1 },
         "containerName": { "type": "string", "minLength": 1 },
         "role": { "type": "string", "minLength": 1 },
+        "selectorLabels": {
+          "type": "object",
+          "description": "Extra selector labels merged into {app, role}. Selectors are immutable, so set these once.",
+          "additionalProperties": { "type": "string", "minLength": 1 },
+          "propertyNames": { "not": { "enum": ["app", "role"] } }
+        },
         "image": { "type": "string", "minLength": 1 },
         "command": { "type": "array", "items": { "type": "string" } },
         "args": { "type": "array", "items": { "type": "string" } },

@@ -89,3 +89,9 @@ tests:
     set: { workloads.web.enabled: false }
     asserts:
       - hasDocuments: { count: 0 }
+
+  - it: merges selectorLabels into the Service selector
+    template: templates/service.yaml
+    set: { workloads.web.selectorLabels: { tier: frontend } }
+    asserts:
+      - equal: { path: spec.selector, value: { app: acme, role: web, tier: frontend } }

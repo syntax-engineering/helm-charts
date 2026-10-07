@@ -84,3 +84,8 @@ tests:
     values: [schema/bad/web-missing-port.yaml]
     asserts:
       - failedTemplate: { errorPattern: '/workloads/web.: missing property .port.' }
+
+  - it: rejects app or role inside selectorLabels
+    values: [schema/bad/selector-labels-role.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'invalid propertyName .role.' }
