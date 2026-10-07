@@ -72,6 +72,11 @@ serviceAccountName: {{ . }}
 {{- with (.w.nodeSelector | default .root.Values.nodeSelector) }}
 nodeSelector: {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- $priority := .root.Values.priorityClassName }}
+{{- if hasKey .w "priorityClassName" }}{{ $priority = .w.priorityClassName }}{{ end }}
+{{- if and $priority (not (include "sw.isOff" $priority)) }}
+priorityClassName: {{ $priority }}
+{{- end }}
 {{- with .root.Values.imagePullSecret }}
 imagePullSecrets:
   - name: {{ . }}

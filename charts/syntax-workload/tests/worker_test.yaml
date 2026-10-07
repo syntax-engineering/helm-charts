@@ -245,3 +245,20 @@ tests:
     set: { workloads.sidekiq.selectorLabels: { priority: high } }
     asserts:
       - equal: { path: spec.selector.matchLabels, value: { app: acme, role: sidekiq, priority: high } }
+
+  - it: sets no priority class by default
+    template: templates/deployment.yaml
+    asserts:
+      - notExists: { path: spec.template.spec.priorityClassName }
+
+  - it: uses the app-wide priority class
+    template: templates/deployment.yaml
+    set: { priorityClassName: acme-batch }
+    asserts:
+      - equal: { path: spec.template.spec.priorityClassName, value: acme-batch }
+
+  - it: lets a workload override the priority class
+    template: templates/deployment.yaml
+    set: { priorityClassName: acme-batch, workloads.sidekiq.priorityClassName: acme-application }
+    asserts:
+      - equal: { path: spec.template.spec.priorityClassName, value: acme-application }

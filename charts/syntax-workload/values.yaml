@@ -5,6 +5,7 @@ image: ""
 imagePullSecret: ""
 serviceAccount: ""
 nodeSelector: {}
+priorityClassName: ""
 envFrom:
   configMaps: []
   secrets: []
