@@ -63,6 +63,12 @@
     - { resourceName: cpu, restartPolicy: NotRequired }
     - { resourceName: memory, restartPolicy: NotRequired }
   {{- end }}
+  {{- if and (ne .w.kind "Web") .w.extraPorts }}
+  ports:
+    {{- range .w.extraPorts }}
+    - { containerPort: {{ .port }}, name: {{ .name }}, protocol: TCP }
+    {{- end }}
+  {{- end }}
   {{- if eq .w.kind "Web" }}
   {{- include "sw.webContainer" . | nindent 2 }}
   {{- end }}
@@ -147,6 +153,10 @@ ports:
   - containerPort: {{ .w.port }}
 {{- else }}
   - { containerPort: {{ .w.port }}, name: {{ $pname }}, protocol: TCP }
+{{- end }}
+{{- range .w.extraPorts }}
+{{- if eq .name $pname }}{{ fail (printf "extraPorts entry %q reuses the port name of the main port" .name) }}{{ end }}
+  - { containerPort: {{ .port }}, name: {{ .name }}, protocol: TCP }
 {{- end }}
 {{- if not (include "sw.isOff" .w.probes) }}
 {{- $get := dict "httpGet" (dict "path" .w.healthPath "port" .w.port "scheme" "HTTP") }}

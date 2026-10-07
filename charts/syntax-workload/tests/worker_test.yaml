@@ -268,3 +268,11 @@ tests:
     set: { priorityClassName: "1000" }
     asserts:
       - equal: { path: spec.template.spec.priorityClassName, value: "1000" }
+
+  - it: exposes extra container ports on a Worker
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.extraPorts: [{ name: metrics, port: 9394 }] }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].ports'
+          value: [{ containerPort: 9394, name: metrics, protocol: TCP }]

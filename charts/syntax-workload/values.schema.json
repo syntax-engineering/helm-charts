@@ -132,6 +132,19 @@
       "additionalProperties": false,
       "properties": {
         "kind": { "enum": ["Web", "Worker", "CronJob", "Hook"] },
+        "extraPorts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "port"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 15 },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        },
+        "serviceAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
         "enabled": { "type": "boolean" },
         "fullName": { "type": "string", "minLength": 1 },
         "containerName": { "type": "string", "minLength": 1 },
