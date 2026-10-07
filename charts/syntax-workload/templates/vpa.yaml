@@ -19,7 +19,7 @@ spec:
     containerPolicies:
       - containerName: {{ $w.containerName | default (include "sw.fullname" $c) }}
         controlledResources: [cpu, memory]
-        controlledValues: RequestsOnly
+        controlledValues: {{ $v.controlledValues | default "RequestsOnly" }}
         minAllowed: {{- toYaml $v.min | nindent 10 }}
         maxAllowed: {{- toYaml $v.max | nindent 10 }}
 {{- end }}

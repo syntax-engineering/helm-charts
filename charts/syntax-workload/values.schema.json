@@ -92,7 +92,8 @@
           "properties": {
             "updateMode": { "enum": ["Off", "Initial", "Recreate", "InPlaceOrRecreate"] },
             "min": { "$ref": "#/$defs/quantities" },
-            "max": { "$ref": "#/$defs/quantities" }
+            "max": { "$ref": "#/$defs/quantities" },
+            "controlledValues": { "enum": ["RequestsOnly", "RequestsAndLimits"] }
           }
         }
       ]
@@ -186,7 +187,9 @@
           "additionalProperties": false,
           "properties": {
             "allowSingleReplica": { "type": "boolean" },
-            "bareContainerPort": { "type": "boolean" }
+            "bareContainerPort": { "type": "boolean" },
+            "resizePolicy": { "type": "boolean" },
+            "scaleTargetRef": { "enum": ["full"] }
           }
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },

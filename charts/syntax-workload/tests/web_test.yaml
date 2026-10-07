@@ -179,3 +179,24 @@ tests:
     set: { workloads.web.serviceAnnotations: { projectcontour.io/upstream-protocol.h2c: "8080" } }
     asserts:
       - equal: { path: metadata.annotations, value: { projectcontour.io/upstream-protocol.h2c: "8080" } }
+
+  - it: omits resizePolicy when compat.resizePolicy is false
+    template: templates/deployment.yaml
+    set: { workloads.web.compat.resizePolicy: false }
+    asserts:
+      - exists: { path: 'spec.template.spec.containers[0].resources' }
+      - notExists: { path: 'spec.template.spec.containers[0].resizePolicy' }
+
+  - it: emits apiVersion and kind in scaleTargetRef when compat.scaleTargetRef is full
+    template: templates/scaledobject.yaml
+    set: { workloads.web.compat.scaleTargetRef: full }
+    asserts:
+      - equal: { path: spec.scaleTargetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-web } }
+
+  - it: defaults VPA controlledValues to RequestsOnly and accepts RequestsAndLimits
+    template: templates/vpa.yaml
+    set: { workloads.web.vpa.controlledValues: RequestsAndLimits }
+    asserts:
+      - equal:
+          path: 'spec.resourcePolicy.containerPolicies[0].controlledValues'
+          value: RequestsAndLimits

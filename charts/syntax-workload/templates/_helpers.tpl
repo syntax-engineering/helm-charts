@@ -59,9 +59,11 @@
   {{- end }}
   {{- with include "sw.resources" . }}
   resources: {{- . | nindent 4 }}
+  {{- if ne (dig "compat" "resizePolicy" true $.w) false }}
   resizePolicy:
     - { resourceName: cpu, restartPolicy: NotRequired }
     - { resourceName: memory, restartPolicy: NotRequired }
+  {{- end }}
   {{- end }}
   {{- if and (ne .w.kind "Web") .w.extraPorts }}
   ports:
