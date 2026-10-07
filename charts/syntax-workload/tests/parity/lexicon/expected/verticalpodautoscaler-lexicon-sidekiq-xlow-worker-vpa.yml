@@ -1,0 +1,26 @@
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: lexicon-sidekiq-xlow-worker-vpa
+  namespace: lexicon-prod
+spec:
+  resourcePolicy:
+    containerPolicies:
+      - containerName: lexicon-sidekiq-xlow-worker
+        controlledResources:
+          - cpu
+          - memory
+        controlledValues: RequestsOnly
+        maxAllowed:
+          cpu: 1300m
+          memory: 6144Mi
+        minAllowed:
+          cpu: 500m
+          memory: 1Gi
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: lexicon-sidekiq-xlow-worker
+  updatePolicy:
+    updateMode: InPlaceOrRecreate

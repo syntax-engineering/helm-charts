@@ -1,0 +1,33 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-compilation-flow
+  namespace: lexicon-prod
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: lexicon
+            role: cron-job
+        spec:
+          containers:
+            - command:
+                - bundle
+                - exec
+                - rake
+                - compile_rbr_taxonomies:nightly_compilation_flow
+              envFrom:
+                - configMapRef:
+                    name: lexicon-config
+                - secretRef:
+                    name: lexicon-secrets
+              image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944
+              name: lexicon-cron-job-nightly-compilation-flow
+          imagePullSecrets:
+            - name: lexicon-registry-secret
+          priorityClassName: lexicon-batch
+          restartPolicy: Never
+  schedule: 30 3 * * *

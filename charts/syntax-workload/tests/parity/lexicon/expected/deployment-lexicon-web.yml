@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: lexicon
+    role: web
+  name: lexicon-web
+  namespace: lexicon-prod
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: lexicon
+      role: web
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: lexicon
+        role: web
+    spec:
+      containers:
+        - envFrom:
+            - configMapRef:
+                name: lexicon-config
+            - secretRef:
+                name: lexicon-secrets
+          image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944
+          name: lexicon-web
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /healthz
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: NotRequired
+          resources:
+            limits:
+              cpu: 3000m
+              memory: 6144Mi
+            requests:
+              cpu: 500m
+              memory: 4608Mi
+      imagePullSecrets:
+        - name: lexicon-registry-secret
+      priorityClassName: lexicon-application
+      serviceAccountName: lexicon-sa
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: lexicon
+              role: web
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          matchLabelKeys:
+            - pod-template-hash

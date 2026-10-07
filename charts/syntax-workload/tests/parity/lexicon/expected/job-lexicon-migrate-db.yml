@@ -1,0 +1,30 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  name: lexicon-migrate-db
+  namespace: lexicon-prod
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - command:
+            - bundle
+            - exec
+            - rake
+            - db:migrate
+          envFrom:
+            - configMapRef:
+                name: lexicon-config
+            - secretRef:
+                name: lexicon-secrets
+          image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944
+          name: lexicon-migrate-db
+      imagePullSecrets:
+        - name: lexicon-registry-secret
+      restartPolicy: Never
+      serviceAccountName: lexicon-sa

@@ -1,0 +1,32 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: changed-acceptance-mail
+  namespace: lexicon-prod
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: lexicon
+            role: cron-job
+        spec:
+          containers:
+            - command:
+                - lc
+                - mailer
+                - changed_acceptance_mail
+              envFrom:
+                - configMapRef:
+                    name: lexicon-config
+                - secretRef:
+                    name: lexicon-secrets
+              image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944
+              name: lexicon-cron-job-changed-acceptance-mail
+          imagePullSecrets:
+            - name: lexicon-registry-secret
+          priorityClassName: lexicon-batch
+          restartPolicy: Never
+  schedule: 0 3 * * *

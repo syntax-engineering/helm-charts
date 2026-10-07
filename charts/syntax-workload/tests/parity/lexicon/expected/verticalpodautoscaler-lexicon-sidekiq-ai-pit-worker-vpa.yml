@@ -1,0 +1,26 @@
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: lexicon-sidekiq-ai-pit-worker-vpa
+  namespace: lexicon-prod
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: lexicon-sidekiq-ai-pit-worker
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: lexicon-sidekiq-ai-pit-worker
+        controlledResources:
+          - cpu
+          - memory
+        controlledValues: RequestsOnly
+        minAllowed:
+          cpu: 500m
+          memory: 1Gi
+        maxAllowed:
+          cpu: 4000m
+          memory: 8Gi

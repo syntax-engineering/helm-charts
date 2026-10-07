@@ -1,0 +1,23 @@
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: lexicon-sidekiq-ai-pit-worker-hpa
+  namespace: lexicon-prod
+spec:
+  cooldownPeriod: 300
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  maxReplicaCount: 6
+  minReplicaCount: 2
+  pollingInterval: 10
+  scaleTargetRef:
+    name: lexicon-sidekiq-ai-pit-worker
+  triggers:
+    - metadata:
+        query: max(sidekiq_queue_latency_seconds{name="ai_pit"})
+        serverAddress: http://kube-prometheus-stack-lexi-prometheus.kube-prometheus-stack:9090
+        threshold: "200"
+      name: sidekiq_ai_pit_queue_latency_max
+      type: prometheus

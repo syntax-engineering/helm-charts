@@ -1,0 +1,32 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: full-classification-generation-flow
+  namespace: lexicon-prod
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: lexicon
+            role: cron-job
+        spec:
+          containers:
+            - command:
+                - lc
+                - classification_generation
+                - full_generation_flow
+              envFrom:
+                - configMapRef:
+                    name: lexicon-config
+                - secretRef:
+                    name: lexicon-secrets
+              image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944
+              name: lexicon-cron-job-full-classification-generation-flow
+          imagePullSecrets:
+            - name: lexicon-registry-secret
+          priorityClassName: lexicon-batch
+          restartPolicy: Never
+  schedule: 0 5 * * *
