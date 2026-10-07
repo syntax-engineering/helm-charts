@@ -2,7 +2,7 @@
 
 Each entry says what changes in rendered output for existing apps.
 
-## [0.2.0] - 2026-10-06
+## [0.2.0] - 2026-10-07
 
 Rendered-output change for existing values: Deployments and Services get `metadata.labels` equal to
 their selector. Nothing else changes for existing values.
