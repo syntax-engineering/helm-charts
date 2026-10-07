@@ -1,0 +1,3 @@
+app: demo
+namespace: demo-env
+image: ghcr.io/example/demo:1.0.0

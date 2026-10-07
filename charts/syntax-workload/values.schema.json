@@ -149,7 +149,8 @@
         "enabled": { "type": "boolean" },
         "fullName": { "type": "string", "minLength": 1 },
         "containerName": { "type": "string", "minLength": 1 },
-        "role": { "type": "string", "minLength": 1 },
+        "app": { "type": "string", "minLength": 1 },
+        "role": { "oneOf": [{ "const": false }, { "type": "string", "minLength": 1 }] },
         "selectorLabels": {
           "type": "object",
           "description": "Extra selector labels merged into {app, role}. Selectors are immutable, so set these once.",

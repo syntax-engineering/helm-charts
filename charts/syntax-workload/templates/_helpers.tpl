@@ -10,7 +10,8 @@
 {{- end }}
 
 {{- define "sw.selector" -}}
-{{- $labels := dict "app" .root.Values.app "role" (include "sw.role" .) -}}
+{{- $labels := dict "app" (.w.app | default .root.Values.app) -}}
+{{- if not (include "sw.isOff" .w.role) }}{{ $_ := set $labels "role" (include "sw.role" .) }}{{ end -}}
 {{- toYaml (merge $labels (.w.selectorLabels | default dict)) -}}
 {{- end }}
 
