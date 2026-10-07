@@ -8,6 +8,7 @@ kind: Deployment
 metadata:
   name: {{ include "sw.fullname" $c }}
   namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
 spec:
   {{- if kindIs "map" $w.replicas }}
   {{- with $w.replicas.pinned }}

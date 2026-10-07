@@ -1,0 +1,55 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: lexicon
+    role: assets
+  name: lexicon-assets
+  namespace: lexicon-prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lexicon
+      role: assets
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: lexicon
+        role: assets
+    spec:
+      containers:
+        - image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944-assets
+          name: lexicon-assets
+          ports:
+            - containerPort: 8082
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /500.html
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+            - mountPath: /etc/nginx/nginx.conf
+              name: nginx-config
+              subPath: nginx.conf
+      imagePullSecrets:
+        - name: lexicon-registry-secret
+      priorityClassName: lexicon-application
+      serviceAccountName: lexicon-assets-sa
+      volumes:
+        - configMap:
+            name: lexicon-assets-nginx-config
+          name: nginx-config

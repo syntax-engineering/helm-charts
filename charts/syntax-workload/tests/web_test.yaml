@@ -89,3 +89,26 @@ tests:
     set: { workloads.web.enabled: false }
     asserts:
       - hasDocuments: { count: 0 }
+
+  - it: merges selectorLabels into the Service selector
+    template: templates/service.yaml
+    set: { workloads.web.selectorLabels: { tier: frontend } }
+    asserts:
+      - equal: { path: spec.selector, value: { app: acme, role: web, tier: frontend } }
+
+  - it: labels the Service with its selector
+    template: templates/service.yaml
+    set: { workloads.web.selectorLabels: { tier: frontend } }
+    asserts:
+      - equal: { path: metadata.labels, value: { app: acme, role: web, tier: frontend } }
+
+  - it: passes volumes and volumeMounts through
+    template: templates/deployment.yaml
+    set:
+      workloads.web.volumes: [{ name: nginx-config, configMap: { name: acme-nginx } }]
+      workloads.web.volumeMounts: [{ name: nginx-config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf }]
+    asserts:
+      - equal: { path: spec.template.spec.volumes, value: [{ name: nginx-config, configMap: { name: acme-nginx } }] }
+      - equal:
+          path: "spec.template.spec.containers[0].volumeMounts"
+          value: [{ name: nginx-config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf }]

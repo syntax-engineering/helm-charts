@@ -1,0 +1,332 @@
+# Lexicon prod: kubernetes/base/workloads/values.yml merged with overlays/prod/workloads.values.yml,
+# with the images Kustomize would set. Expected output is lexicon at origin/SPRINT plus the
+# accepted changes in the lexicon migration spec.
+
+# Lexicon workloads, rendered by the syntax-workload chart from each overlay's helmCharts: entry.
+# Chart docs: https://github.com/syntax-engineering/helm-charts/tree/main/charts/syntax-workload
+#
+# Environment differences live in overlays/<env>/workloads.values.yml (namespace is set there).
+# Settings marked "compat" reproduce the manifests this replaced; Step 2 of the migration removes
+# them one at a time.
+app: lexicon
+image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944 # overlays rewrite name and tag with images:
+imagePullSecret: lexicon-registry-secret
+priorityClassName: lexicon-batch
+envFrom:
+  configMaps: [lexicon-config]
+  secrets: [lexicon-secrets]
+prometheus:
+  serverAddress: http://kube-prometheus-stack-lexi-prometheus.kube-prometheus-stack:9090
+workloads:
+  # ------------------------------------------
+  # 🌐 Web
+  # ------------------------------------------
+  web:
+    kind: Web
+    priorityClassName: lexicon-application
+    serviceAccount: lexicon-sa
+    serviceName: lexicon-svc # compat
+    serviceType: NodePort # compat
+    port: 8080
+    healthPath: /healthz
+    probes: # compat: readiness only
+      startup: false
+      liveness: false
+      readiness:
+        initialDelaySeconds: 15
+    replicas: {min: 2, max: 5, pinned: 4} # compat: pinned
+    autoscaling:
+      metricName: http_requests_rate
+      query: sum(rate(http_requests_total{path!~"(/healthz|/metrics|/ahoy/events|/users/sign_in/metrics|/|/events)$"}[1m]))
+      threshold: "2.00"
+      fallbackReplicas: 3 # compat
+      cooldownPeriod: 600 # compat
+      behavior: false # compat
+    resources:
+      requests:
+        cpu: 500m
+        memory: 4608Mi
+      limits:
+        cpu: 3000m
+        memory: 6144Mi
+    vpa:
+      updateMode: InPlaceOrRecreate
+      min:
+        cpu: 500m
+        memory: 1Gi
+      max:
+        cpu: 2500m
+        memory: 6144Mi
+    names:
+      pdb: lexicon-web
+  assets: # compat
+    kind: Web
+    image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944-assets # overlays rewrite to <tag>-assets
+    priorityClassName: lexicon-application
+    serviceAccount: lexicon-assets-sa
+    serviceName: lexicon-assets-svc # compat
+    serviceType: NodePort # compat
+    envFrom:
+      configMaps: []
+      secrets: []
+    port: 8082
+    healthPath: /500.html
+    probes: # compat: readiness only
+      startup: false
+      liveness: false
+      readiness:
+        initialDelaySeconds: 5
+    replicas: 1
+    compat:
+      allowSingleReplica: true
+    resources: false # compat
+    pdb: false # compat
+    vpa: false # compat
+    spread: false # compat
+    volumes:
+      - name: nginx-config
+        configMap: {name: lexicon-assets-nginx-config}
+    volumeMounts:
+      - name: nginx-config
+        mountPath: /etc/nginx/nginx.conf
+        subPath: nginx.conf
+  # ------------------------------------------
+  # ⚙️ Sidekiq
+  # ------------------------------------------
+  sidekiq-worker:
+    kind: Worker
+    priorityClassName: lexicon-application
+    role: worker
+    selectorLabels:
+      priority: default
+    command: [bundle, exec, sidekiq, -q, high, -q, default, -q, low, -q, mailers]
+    serviceAccount: lexicon-sidekiq-sa
+    replicas:
+      min: 2
+      max: 2
+      pinned: 2
+    autoscaling: # compat: pinned
+      metricName: sidekiq_latency_max
+      query: max(sidekiq_queue_latency_seconds{name=~"high|default|low|mailers"})
+      threshold: "200"
+      cooldownPeriod: 300 # compat
+      pollingInterval: 10 # compat
+      behavior: false # compat
+    resources:
+      requests:
+        cpu: 500m
+        memory: 4096Mi
+      limits:
+        cpu: 1381m
+        memory: 8192Mi
+    vpa:
+      updateMode: InPlaceOrRecreate
+      min:
+        cpu: 500m
+        memory: 1Gi
+      max:
+        cpu: 1300m
+        memory: 6000Mi
+    names:
+      pdb: lexicon-sidekiq-worker
+  sidekiq-xlow-worker: # compat
+    kind: Worker
+    role: worker
+    selectorLabels:
+      priority: xlow
+    command: [bundle, exec, sidekiq, -q, xlow]
+    serviceAccount: lexicon-sidekiq-sa
+    replicas: {min: 2, max: 6, pinned: 2} # compat: pinned
+    autoscaling:
+      metricName: sidekiq_xlow_queue_latency_max
+      query: max(sidekiq_queue_latency_seconds{name="xlow"})
+      threshold: "200"
+      cooldownPeriod: 300 # compat
+      pollingInterval: 10 # compat
+      behavior: false # compat
+    resources:
+      requests:
+        cpu: 500m
+        memory: 3328Mi
+      limits:
+        cpu: 1381m
+        memory: 6144Mi
+    vpa:
+      updateMode: InPlaceOrRecreate
+      min:
+        cpu: 500m
+        memory: 1Gi
+      max:
+        cpu: 1300m
+        memory: 6144Mi
+    names:
+      pdb: lexicon-sidekiq-xlow-worker
+  sidekiq-ai-pit-worker: # compat
+    kind: Worker
+    role: worker
+    selectorLabels:
+      priority: ai_pit
+    command: [bundle, exec, sidekiq, -q, ai_pit]
+    serviceAccount: lexicon-sidekiq-sa
+    replicas: {min: 2, max: 6, pinned: 2} # compat: pinned
+    autoscaling:
+      metricName: sidekiq_ai_pit_queue_latency_max
+      query: max(sidekiq_queue_latency_seconds{name="ai_pit"})
+      threshold: "200"
+      cooldownPeriod: 300 # compat
+      pollingInterval: 10 # compat
+      behavior: false # compat
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1381m
+        memory: 2048Mi
+    vpa:
+      updateMode: "Off"
+    names:
+      pdb: lexicon-sidekiq-ai-pit-worker
+  sidekiq-serial-sync-worker: # compat
+    kind: Worker
+    role: worker
+    selectorLabels:
+      priority: serial_sync
+    command: [bundle, exec, sidekiq, -q, serial_sync, -c, "1"]
+    serviceAccount: lexicon-sidekiq-sa
+    replicas: 1
+    compat:
+      allowSingleReplica: true
+    strategy:
+      maxSurge: 0
+      maxUnavailable: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1381m
+        memory: 2048Mi
+    vpa:
+      updateMode: "Off"
+      min:
+        cpu: 500m
+        memory: 512Mi
+      max:
+        cpu: 1300m
+        memory: 2048Mi
+    pdb: false # compat
+  # ------------------------------------------
+  # 🚀 Deploy hook
+  # ------------------------------------------
+  migrate-db:
+    kind: Hook
+    phase: PreSync
+    command: [bundle, exec, rake, 'db:migrate']
+    serviceAccount: lexicon-sa
+    priorityClassName: false # compat
+    resources: false # compat
+    activeDeadlineSeconds: false # compat
+  # ------------------------------------------
+  # ⏰ CronJobs
+  # ------------------------------------------
+  # Every cronjob below sets these compat settings: fullName (unprefixed name), containerName,
+  # and resources plus the four guardrails set to false.
+  cron-changed-acceptance-mail:
+    kind: CronJob
+    fullName: changed-acceptance-mail
+    containerName: lexicon-cron-job-changed-acceptance-mail
+    role: cron-job
+    schedule: "0 3 * * *"
+    command: [lc, mailer, changed_acceptance_mail]
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-clean-cc-report-compilations:
+    kind: CronJob
+    fullName: clean-cc-report-compilations
+    containerName: lexicon-cron-job-clean-cc-report-compilations
+    role: cron-job
+    schedule: "0 4 * * *"
+    command: [bundle, exec, rake, 'operation:clean_cc_report_compilations']
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-clean-successful-exports:
+    kind: CronJob
+    fullName: clean-successful-exports
+    containerName: lexicon-cron-job-clean-successful-exports
+    role: cron-job
+    schedule: "0 4 * * *"
+    command: [bundle, exec, rake, 'operation:clean_success_exports']
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-fallback-datastore-export-flow:
+    kind: CronJob
+    fullName: fallback-datastore-export-flow
+    containerName: lexicon-cron-job-fallback-datastore-export-flow
+    role: cron-job
+    schedule: "30 7 * * *"
+    command: [bundle, exec, rake, 'compile_rbr_taxonomies:fallback_datastore_export_flow']
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-full-classification-generation-flow:
+    kind: CronJob
+    fullName: full-classification-generation-flow
+    containerName: lexicon-cron-job-full-classification-generation-flow
+    role: cron-job
+    schedule: "0 5 * * *"
+    command: [lc, classification_generation, full_generation_flow]
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-imerit-private-classification-import:
+    kind: CronJob
+    fullName: imerit-private-classification-import
+    containerName: lexicon-cron-job-imerit-private-classification-import
+    role: cron-job
+    schedule: "0 5 * * *"
+    command: [lc, private_company_classifications, import]
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-nightly-compilation-flow:
+    kind: CronJob
+    fullName: nightly-compilation-flow
+    containerName: lexicon-cron-job-nightly-compilation-flow
+    role: cron-job
+    schedule: "30 3 * * *"
+    command: [bundle, exec, rake, 'compile_rbr_taxonomies:nightly_compilation_flow']
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+  cron-nightly-multiple-universes-import:
+    kind: CronJob
+    fullName: nightly-multiple-universes-import
+    containerName: lexicon-cron-job-nightly-multiple-universes-import
+    role: cron-job
+    schedule: "0 2 * * *"
+    command: [lc, universe, import_multiple_universes]
+    resources: false
+    concurrencyPolicy: false
+    successfulJobsHistoryLimit: false
+    failedJobsHistoryLimit: false
+    activeDeadlineSeconds: false
+# Prod differences for the syntax-workload chart. Shared values: ../../base/workloads/values.yml
+namespace: lexicon-prod

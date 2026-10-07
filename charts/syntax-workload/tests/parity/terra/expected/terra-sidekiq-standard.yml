@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: terra-sidekiq-standard
   namespace: terra-env
+  labels:
+    app: terra
+    role: sidekiq-standard
 spec:
   replicas: 2
   selector:

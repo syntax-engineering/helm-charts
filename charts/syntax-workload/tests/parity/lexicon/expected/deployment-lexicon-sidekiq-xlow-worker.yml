@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: lexicon
+    priority: xlow
+    role: worker
+  name: lexicon-sidekiq-xlow-worker
+  namespace: lexicon-prod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lexicon
+      priority: xlow
+      role: worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: lexicon
+        priority: xlow
+        role: worker
+    spec:
+      containers:
+        - command:
+            - bundle
+            - exec
+            - sidekiq
+            - -q
+            - xlow
+          envFrom:
+            - configMapRef:
+                name: lexicon-config
+            - secretRef:
+                name: lexicon-secrets
+          image: ghcr.io/syntax-engineering/lexicon_prod:20260911223944
+          name: lexicon-sidekiq-xlow-worker
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: NotRequired
+          resources:
+            limits:
+              cpu: 1381m
+              memory: 6144Mi
+            requests:
+              cpu: 500m
+              memory: 3328Mi
+      imagePullSecrets:
+        - name: lexicon-registry-secret
+      priorityClassName: lexicon-batch
+      serviceAccountName: lexicon-sidekiq-sa
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: lexicon
+              priority: xlow
+              role: worker
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          matchLabelKeys:
+            - pod-template-hash

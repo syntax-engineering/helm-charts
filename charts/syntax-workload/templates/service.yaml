@@ -7,6 +7,7 @@ kind: Service
 metadata:
   name: {{ $w.serviceName | default (include "sw.fullname" $c) }}
   namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
 spec:
   {{- with $w.serviceType }}
   type: {{ . }}

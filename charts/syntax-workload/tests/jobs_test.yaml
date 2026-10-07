@@ -72,3 +72,15 @@ tests:
     set: { workloads.nightly.enabled: false, workloads.migrate-db.enabled: false }
     asserts:
       - hasDocuments: { count: 0 }
+
+  - it: applies the app-wide priority class to CronJob pods
+    template: templates/cronjob.yaml
+    set: { priorityClassName: acme-batch }
+    asserts:
+      - equal: { path: spec.jobTemplate.spec.template.spec.priorityClassName, value: acme-batch }
+
+  - it: omits the priority class on a hook that sets it to false
+    template: templates/hook.yaml
+    set: { priorityClassName: acme-batch, workloads.migrate-db.priorityClassName: false }
+    asserts:
+      - notExists: { path: spec.template.spec.priorityClassName }

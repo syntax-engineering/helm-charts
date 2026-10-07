@@ -54,6 +54,9 @@ matches the committed golden output:
     apiVersion: apps/v1
     kind: Deployment
     metadata:
+      labels:
+        app: acme
+        role: mcp
       name: acme-mcp
       namespace: acme-env
     spec:
@@ -141,6 +144,9 @@ matches the committed golden output:
     apiVersion: apps/v1
     kind: Deployment
     metadata:
+      labels:
+        app: acme
+        role: sidekiq
       name: acme-sidekiq
       namespace: acme-env
     spec:
@@ -202,6 +208,9 @@ matches the committed golden output:
     apiVersion: apps/v1
     kind: Deployment
     metadata:
+      labels:
+        app: acme
+        role: web
       name: acme-web
       namespace: acme-env
     spec:
@@ -421,6 +430,9 @@ matches the committed golden output:
     apiVersion: v1
     kind: Service
     metadata:
+      labels:
+        app: acme
+        role: mcp
       name: acme-mcp
       namespace: acme-env
     spec:
@@ -436,6 +448,9 @@ matches the committed golden output:
     apiVersion: v1
     kind: Service
     metadata:
+      labels:
+        app: acme
+        role: web
       name: acme-web
       namespace: acme-env
     spec:

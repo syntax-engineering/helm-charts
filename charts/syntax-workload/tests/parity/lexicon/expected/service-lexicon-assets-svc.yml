@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: lexicon
+    role: assets
+  name: lexicon-assets-svc
+  namespace: lexicon-prod
+spec:
+  ports:
+    - name: http
+      port: 8082
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: lexicon
+    role: assets
+  type: NodePort

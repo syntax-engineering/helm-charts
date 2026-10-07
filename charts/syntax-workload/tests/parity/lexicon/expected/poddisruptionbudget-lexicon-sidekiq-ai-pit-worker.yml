@@ -1,0 +1,13 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: lexicon-sidekiq-ai-pit-worker
+  namespace: lexicon-prod
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: lexicon
+      priority: ai_pit
+      role: worker

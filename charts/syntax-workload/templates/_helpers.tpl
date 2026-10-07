@@ -10,8 +10,8 @@
 {{- end }}
 
 {{- define "sw.selector" -}}
-app: {{ .root.Values.app }}
-role: {{ include "sw.role" . }}
+{{- $labels := dict "app" .root.Values.app "role" (include "sw.role" .) -}}
+{{- toYaml (merge $labels (.w.selectorLabels | default dict)) -}}
 {{- end }}
 
 {{/* "true" when the value is the boolean false, which turns a default off. */}}
@@ -54,6 +54,9 @@ role: {{ include "sw.role" . }}
     - secretRef: { name: {{ . }} }
     {{- end }}
   {{- end }}
+  {{- with .w.volumeMounts }}
+  volumeMounts: {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- with include "sw.resources" . }}
   resources: {{- . | nindent 4 }}
   resizePolicy:
@@ -72,24 +75,65 @@ serviceAccountName: {{ . }}
 {{- with (.w.nodeSelector | default .root.Values.nodeSelector) }}
 nodeSelector: {{- toYaml . | nindent 2 }}
 {{- end }}
+{{- $priority := .root.Values.priorityClassName }}
+{{- if hasKey .w "priorityClassName" }}{{ $priority = .w.priorityClassName }}{{ end }}
+{{- if and $priority (not (include "sw.isOff" $priority)) }}
+priorityClassName: {{ $priority | quote }}
+{{- end }}
 {{- with .root.Values.imagePullSecret }}
 imagePullSecrets:
   - name: {{ . }}
 {{- end }}
 containers:
 {{- include "sw.container" . | nindent 2 }}
+{{- with .w.volumes }}
+volumes: {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}
 
-{{/* Fails the render when two Deployment workloads would select the same pods. */}}
+{{/*
+Fails the render when pods could be selected by the wrong workload. Rules:
+- For any two enabled Web/Worker workloads, one selector must not be a subset of
+  the other (this includes equal selectors). Pod labels equal the selector, so a
+  subset selector would also match the other workload's pods.
+- A CronJob's pod labels must not match (be a superset of) any enabled
+  Web/Worker selector.
+- CronJobs may share a selector with each other. Hooks carry no labels.
+*/}}
 {{- define "sw.assertUniqueSelectors" -}}
-{{- $seen := dict -}}
+{{- $deployments := dict -}}
+{{- $crons := dict -}}
 {{- range $name, $w := .Values.workloads -}}
-{{- if and (has $w.kind (list "Web" "Worker" "CronJob")) (ne $w.enabled false) -}}
-{{- $role := $w.role | default $name -}}
-{{- if hasKey $seen $role -}}
-{{- fail (printf "workloads %q and %q both select role=%s; give one of them a different role" $name (get $seen $role) $role) -}}
+{{- if ne $w.enabled false -}}
+{{- if has $w.kind (list "Web" "Worker") -}}
+{{- $_ := set $deployments $name (fromYaml (include "sw.selector" (dict "root" $ "name" $name "w" $w))) -}}
+{{- else if eq $w.kind "CronJob" -}}
+{{- $_ := set $crons $name (fromYaml (include "sw.selector" (dict "root" $ "name" $name "w" $w))) -}}
 {{- end -}}
-{{- $_ := set $seen $role $name -}}
+{{- end -}}
+{{- end -}}
+{{- range $aname, $asel := $deployments -}}
+{{- range $bname, $bsel := $deployments -}}
+{{- if ne $aname $bname -}}
+{{- $match := dict "all" true -}}
+{{- range $k, $v := $asel -}}
+{{- if ne (get $bsel $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
+{{- end -}}
+{{- if get $match "all" -}}
+{{- fail (printf "the selector of workload %q would also match the pods of workload %q; give one of them a different role or selectorLabels" $aname $bname) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- range $cname, $labels := $crons -}}
+{{- range $dname, $sel := $deployments -}}
+{{- $match := dict "all" true -}}
+{{- range $k, $v := $sel -}}
+{{- if ne (get $labels $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
+{{- end -}}
+{{- if get $match "all" -}}
+{{- fail (printf "CronJob workload %q has pod labels that match the selector of workload %q; give one of them a different role or selectorLabels" $cname $dname) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end }}

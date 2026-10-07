@@ -9,7 +9,7 @@ tests:
       - isKind: { of: Deployment }
       - equal: { path: metadata.name, value: acme-sidekiq }
       - equal: { path: metadata.namespace, value: acme-env }
-      - notExists: { path: metadata.labels }
+      - equal: { path: metadata.labels, value: { app: acme, role: sidekiq } }
 
   - it: selects pods by app and role only
     template: templates/deployment.yaml
@@ -117,7 +117,7 @@ tests:
       workloads.critical: { kind: Worker, role: sidekiq, replicas: 2 }
     asserts:
       - failedTemplate:
-          errorPattern: 'workloads "sidekiq" and "critical" both select role=sidekiq'
+          errorPattern: 'selector of workload "critical" would also match the pods of workload "sidekiq"'
 
   - it: fails when a CronJob shares a role with a Deployment workload
     template: templates/deployment.yaml
@@ -125,7 +125,7 @@ tests:
       workloads.sweep: { kind: CronJob, role: sidekiq, schedule: "0 * * * *", command: [bundle, exec, rake, sweep] }
     asserts:
       - failedTemplate:
-          errorPattern: 'both select role=sidekiq'
+          errorPattern: 'CronJob workload "sweep" has pod labels that match the selector of workload "sidekiq"'
 
   - it: keeps the default maxUnavailable when a strategy override sets only maxSurge
     template: templates/deployment.yaml
@@ -229,3 +229,42 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "prometheus.serverAddress is required when a workload autoscales"
+
+  - it: merges selectorLabels into the selector, pod labels, and spread
+    template: templates/deployment.yaml
+    set: { workloads.sidekiq.selectorLabels: { priority: high } }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: sidekiq, priority: high } }
+      - equal: { path: spec.template.metadata.labels, value: { app: acme, role: sidekiq, priority: high } }
+      - equal:
+          path: "spec.template.spec.topologySpreadConstraints[0].labelSelector.matchLabels"
+          value: { app: acme, role: sidekiq, priority: high }
+
+  - it: merges selectorLabels into the PDB selector
+    template: templates/pdb.yaml
+    set: { workloads.sidekiq.selectorLabels: { priority: high } }
+    asserts:
+      - equal: { path: spec.selector.matchLabels, value: { app: acme, role: sidekiq, priority: high } }
+
+  - it: sets no priority class by default
+    template: templates/deployment.yaml
+    asserts:
+      - notExists: { path: spec.template.spec.priorityClassName }
+
+  - it: uses the app-wide priority class
+    template: templates/deployment.yaml
+    set: { priorityClassName: acme-batch }
+    asserts:
+      - equal: { path: spec.template.spec.priorityClassName, value: acme-batch }
+
+  - it: lets a workload override the priority class
+    template: templates/deployment.yaml
+    set: { priorityClassName: acme-batch, workloads.sidekiq.priorityClassName: acme-application }
+    asserts:
+      - equal: { path: spec.template.spec.priorityClassName, value: acme-application }
+
+  - it: renders a numeric-looking priority class name as a string
+    template: templates/deployment.yaml
+    set: { priorityClassName: "1000" }
+    asserts:
+      - equal: { path: spec.template.spec.priorityClassName, value: "1000" }

@@ -3,6 +3,9 @@ kind: Service
 metadata:
   name: terra-svc
   namespace: terra-env
+  labels:
+    app: terra
+    role: web
 spec:
   selector:
     app: terra

@@ -1,0 +1,9 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads:
+  sidekiq:
+    kind: Worker
+    command: [sidekiq]
+    replicas: 2
+    selectorLabels: { role: other }
