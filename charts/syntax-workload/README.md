@@ -10,7 +10,7 @@ in. Apps render it from their Kustomize overlays with `helmCharts:`.
 helmCharts:
   - name: syntax-workload
     repo: oci://ghcr.io/syntax-engineering/charts
-    version: 0.1.0
+    version: 0.2.0
     releaseName: <app>
     valuesFile: ../../base/workloads/values.yml
     additionalValuesFiles: [workloads.values.yml]
@@ -28,6 +28,7 @@ Argo CD must run Kustomize with `--enable-helm --load-restrictor LoadRestriction
 | `imagePullSecret` | no | One pull secret name |
 | `serviceAccount` | no | Default service account |
 | `nodeSelector` | no | Default node selector |
+| `priorityClassName` | no | Default priority class for every pod |
 | `envFrom.configMaps`, `envFrom.secrets` | no | Env sources, config maps first |
 | `prometheus.serverAddress` | when autoscaling | Prometheus for KEDA triggers |
 
@@ -46,7 +47,12 @@ Argo CD must run Kustomize with `--enable-helm --load-restrictor LoadRestriction
 `replicas` is an integer, or `{min, max}` when `autoscaling` is set. The minimum is 2.
 
 Every workload can set `command`, `args`, `env`, `envFrom`, `serviceAccount`, `nodeSelector`,
-`resources`, and `enabled: false`.
+`priorityClassName` (`false` omits it), `resources`, `volumes`, `volumeMounts`, `selectorLabels`, and
+`enabled: false`.
+
+`selectorLabels` adds labels to the workload's selector, pod labels, spread, PDB, and Service. Use it
+when several workloads share a `role`. Selectors are immutable, so set it once. Deployments and
+Services also carry their selector as `metadata.labels`.
 
 ## Defaults
 
