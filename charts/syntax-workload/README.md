@@ -53,11 +53,13 @@ Every workload can set `command`, `args`, `env`, `envFrom`, `serviceAccount`, `n
 Web workloads can also set `probeType`, `portName`, `extraPorts`, and `serviceAnnotations`:
 
 - `probeType` is `http` (the default, an `httpGet` on `healthPath`), `tcp` (a `tcpSocket` on the
-  port), or `grpc` (the gRPC health check on the port number).
+  port), or `grpc` (the gRPC health check on the port number). The `probes` overrides only change
+  timing. Adding a handler key (`httpGet`, `tcpSocket`, `grpc`) to an override renders two handlers,
+  which Kubernetes rejects.
 - `portName` names the container port, the Service port, and the Service `targetPort`. It defaults
   to `http`.
 - `extraPorts` is a list of `{name, port}` added to the container and not exposed by the Service.
-  Workers can set it too.
+  Workers can set it too. CronJobs and Hooks cannot.
 - `serviceAnnotations` is a map copied onto the Service.
 
 `app` overrides the `app` label in a workload's selector and labels. It does not change the
@@ -77,7 +79,7 @@ Web or Worker selector. CronJobs may share a `role` with each other.
 | Setting | Default |
 |---|---|
 | Resources | requests 1000m / 2Gi, limits 2000m / 4Gi |
-| VPA | recommendation-only, min 500m / 1Gi, max 4000m / 8Gi |
+| VPA | recommendation-only, min 500m / 1Gi, max 4000m / 8Gi, `controlledValues: RequestsOnly` (set `vpa.controlledValues: RequestsAndLimits` on a Web or Worker workload to change it) |
 | PDB | `maxUnavailable: 1` |
 | Spread | soft, one per hostname, `matchLabelKeys: [pod-template-hash]` |
 | Strategy | RollingUpdate, maxSurge 25%, maxUnavailable 0 |
@@ -99,7 +101,6 @@ removes them one small PR at a time. Treat any that remain as documented one-off
 | `compat.bareContainerPort` | Unnamed container port; Service targets the port number |
 | `compat.resizePolicy: false` | Omit the container `resizePolicy` |
 | `compat.scaleTargetRef: full` | Add `apiVersion` and `kind` to the ScaledObject `scaleTargetRef` |
-| `vpa.controlledValues` | `RequestsOnly` (default) or `RequestsAndLimits` |
 | `role: false` | Drop the `role` selector label |
 | `pdb`, `vpa`, `probes`, `strategy`, `resources` set to `false` | Omit that default |
 | `probes.{startup,readiness,liveness}` | Merge timing over a default probe, or `false` to drop it |

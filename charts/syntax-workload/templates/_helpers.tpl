@@ -66,7 +66,7 @@
     - { resourceName: memory, restartPolicy: NotRequired }
   {{- end }}
   {{- end }}
-  {{- if and (ne .w.kind "Web") .w.extraPorts }}
+  {{- if and (eq .w.kind "Worker") .w.extraPorts }}
   ports:
     {{- range .w.extraPorts }}
     - { containerPort: {{ .port }}, name: {{ .name }}, protocol: TCP }
@@ -129,7 +129,7 @@ Fails the render when pods could be selected by the wrong workload. Rules:
 {{- if ne (get $bsel $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
 {{- end -}}
 {{- if get $match "all" -}}
-{{- fail (printf "the selector of workload %q would also match the pods of workload %q; give one of them a different role or selectorLabels" $aname $bname) -}}
+{{- fail (printf "the selector of workload %q would also match the pods of workload %q; give one of them a different app, role, or selectorLabels" $aname $bname) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -141,7 +141,7 @@ Fails the render when pods could be selected by the wrong workload. Rules:
 {{- if ne (get $labels $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
 {{- end -}}
 {{- if get $match "all" -}}
-{{- fail (printf "CronJob workload %q has pod labels that match the selector of workload %q; give one of them a different role or selectorLabels" $cname $dname) -}}
+{{- fail (printf "CronJob workload %q has pod labels that match the selector of workload %q; give one of them a different app, role, or selectorLabels" $cname $dname) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

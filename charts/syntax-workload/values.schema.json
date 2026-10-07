@@ -140,7 +140,7 @@
             "required": ["name", "port"],
             "additionalProperties": false,
             "properties": {
-              "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 15 },
+              "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 15, "allOf": [{ "not": { "pattern": "^[0-9]+$" } }, { "not": { "pattern": "--" } }] },
               "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
             }
           }
@@ -196,7 +196,7 @@
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "healthPath": { "type": "string", "pattern": "^/" },
         "probeType": { "enum": ["http", "tcp", "grpc"], "description": "Probe handler: httpGet on healthPath, tcpSocket on the port, or grpc on the port number" },
-        "portName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 15 },
+        "portName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 15, "allOf": [{ "not": { "pattern": "^[0-9]+$" } }, { "not": { "pattern": "--" } }] },
         "probes": { "$ref": "#/$defs/probes" },
         "serviceName": { "type": "string", "minLength": 1 },
         "serviceType": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
@@ -242,7 +242,7 @@
         {
           "if": { "properties": { "kind": { "enum": ["CronJob", "Hook"] } } },
           "then": {
-            "not": { "anyOf": [{ "required": ["replicas"] }, { "required": ["autoscaling"] }, { "required": ["port"] }] }
+            "not": { "anyOf": [{ "required": ["replicas"] }, { "required": ["autoscaling"] }, { "required": ["port"] }, { "required": ["extraPorts"] }] }
           }
         },
         {

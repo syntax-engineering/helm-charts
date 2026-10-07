@@ -96,3 +96,14 @@ tests:
         b: { kind: Web, port: 3001, probeType: tcp, replicas: 2, app: shared, role: false }
     asserts:
       - failedTemplate: { errorPattern: "would also match the pods" }
+
+  - it: fails when a role-less workload sits next to a roled workload of the same app
+    values:
+      - values/app-override.yaml
+    template: templates/deployment.yaml
+    set:
+      workloads:
+        a: { kind: Web, port: 3000, probeType: tcp, replicas: 2, app: demo, role: false }
+        b: { kind: Web, port: 3001, probeType: tcp, replicas: 2 }
+    asserts:
+      - failedTemplate: { errorPattern: "would also match the pods" }

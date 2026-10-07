@@ -193,7 +193,14 @@ tests:
     asserts:
       - equal: { path: spec.scaleTargetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-web } }
 
-  - it: defaults VPA controlledValues to RequestsOnly and accepts RequestsAndLimits
+  - it: defaults VPA controlledValues to RequestsOnly
+    template: templates/vpa.yaml
+    asserts:
+      - equal:
+          path: 'spec.resourcePolicy.containerPolicies[0].controlledValues'
+          value: RequestsOnly
+
+  - it: accepts RequestsAndLimits for VPA controlledValues
     template: templates/vpa.yaml
     set: { workloads.web.vpa.controlledValues: RequestsAndLimits }
     asserts:
