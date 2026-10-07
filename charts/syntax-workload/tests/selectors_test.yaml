@@ -21,7 +21,24 @@ tests:
       workloads.sidekiq.role: worker
       workloads.xlow: { kind: Worker, role: worker, command: [sidekiq], replicas: 2 }
     asserts:
-      - failedTemplate: { errorPattern: 'have the same selector' }
+      - failedTemplate: { errorPattern: 'would also match' }
+
+  - it: rejects a worker whose selector is a subset of another worker's selector
+    template: templates/deployment.yaml
+    set:
+      workloads.sidekiq.role: worker
+      workloads.xlow: { kind: Worker, role: worker, selectorLabels: { priority: xlow }, command: [sidekiq], replicas: 2 }
+    asserts:
+      - failedTemplate: { errorPattern: 'would also match' }
+
+  - it: allows the broader workload to be disabled
+    template: templates/deployment.yaml
+    set:
+      workloads.sidekiq.role: worker
+      workloads.sidekiq.enabled: false
+      workloads.xlow: { kind: Worker, role: worker, selectorLabels: { priority: xlow }, command: [sidekiq], replicas: 2 }
+    asserts:
+      - notFailedTemplate: {}
 
   - it: ignores a disabled workload when checking selectors
     set:

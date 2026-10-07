@@ -117,7 +117,7 @@ tests:
       workloads.critical: { kind: Worker, role: sidekiq, replicas: 2 }
     asserts:
       - failedTemplate:
-          errorPattern: 'workloads "critical" and "sidekiq" have the same selector'
+          errorPattern: 'selector of workload "critical" would also match the pods of workload "sidekiq"'
 
   - it: fails when a CronJob shares a role with a Deployment workload
     template: templates/deployment.yaml
@@ -262,3 +262,9 @@ tests:
     set: { priorityClassName: acme-batch, workloads.sidekiq.priorityClassName: acme-application }
     asserts:
       - equal: { path: spec.template.spec.priorityClassName, value: acme-application }
+
+  - it: renders a numeric-looking priority class name as a string
+    template: templates/deployment.yaml
+    set: { priorityClassName: "1000" }
+    asserts:
+      - equal: { path: spec.template.spec.priorityClassName, value: "1000" }

@@ -54,6 +54,11 @@ Every workload can set `command`, `args`, `env`, `envFrom`, `serviceAccount`, `n
 when several workloads share a `role`. Selectors are immutable, so set it once. Deployments and
 Services also carry their selector as `metadata.labels`.
 
+Hooks ignore `selectorLabels` because their pods carry no labels. The render fails if one Web or
+Worker workload's selector would also match another's pods, for example `role: worker` next to
+`role: worker` with `selectorLabels`. The render also fails if a CronJob's pod labels would match a
+Web or Worker selector. CronJobs may share a `role` with each other.
+
 ## Defaults
 
 | Setting | Default |

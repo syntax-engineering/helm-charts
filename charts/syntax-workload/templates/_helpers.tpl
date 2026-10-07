@@ -78,7 +78,7 @@ nodeSelector: {{- toYaml . | nindent 2 }}
 {{- $priority := .root.Values.priorityClassName }}
 {{- if hasKey .w "priorityClassName" }}{{ $priority = .w.priorityClassName }}{{ end }}
 {{- if and $priority (not (include "sw.isOff" $priority)) }}
-priorityClassName: {{ $priority }}
+priorityClassName: {{ $priority | quote }}
 {{- end }}
 {{- with .root.Values.imagePullSecret }}
 imagePullSecrets:
@@ -92,25 +92,36 @@ volumes: {{- toYaml . | nindent 2 }}
 {{- end }}
 
 {{/*
-Fails the render when two enabled Deployment workloads would select the same
-pods, or when a Deployment workload's selector would also match a CronJob's
-pods. CronJobs may share a selector with each other. Hooks carry no labels.
+Fails the render when pods could be selected by the wrong workload. Rules:
+- For any two enabled Web/Worker workloads, one selector must not be a subset of
+  the other (this includes equal selectors). Pod labels equal the selector, so a
+  subset selector would also match the other workload's pods.
+- A CronJob's pod labels must not match (be a superset of) any enabled
+  Web/Worker selector.
+- CronJobs may share a selector with each other. Hooks carry no labels.
 */}}
 {{- define "sw.assertUniqueSelectors" -}}
-{{- $seen := dict -}}
 {{- $deployments := dict -}}
 {{- $crons := dict -}}
 {{- range $name, $w := .Values.workloads -}}
 {{- if ne $w.enabled false -}}
 {{- if has $w.kind (list "Web" "Worker") -}}
-{{- $selector := include "sw.selector" (dict "root" $ "name" $name "w" $w) -}}
-{{- if hasKey $seen $selector -}}
-{{- fail (printf "workloads %q and %q have the same selector (%s); give one of them a different role or selectorLabels" (get $seen $selector) $name ($selector | replace "\n" ", ")) -}}
-{{- end -}}
-{{- $_ := set $seen $selector $name -}}
-{{- $_ := set $deployments $name (fromYaml $selector) -}}
+{{- $_ := set $deployments $name (fromYaml (include "sw.selector" (dict "root" $ "name" $name "w" $w))) -}}
 {{- else if eq $w.kind "CronJob" -}}
 {{- $_ := set $crons $name (fromYaml (include "sw.selector" (dict "root" $ "name" $name "w" $w))) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- range $aname, $asel := $deployments -}}
+{{- range $bname, $bsel := $deployments -}}
+{{- if ne $aname $bname -}}
+{{- $match := dict "all" true -}}
+{{- range $k, $v := $asel -}}
+{{- if ne (get $bsel $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
+{{- end -}}
+{{- if get $match "all" -}}
+{{- fail (printf "the selector of workload %q would also match the pods of workload %q; give one of them a different role or selectorLabels" $aname $bname) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
