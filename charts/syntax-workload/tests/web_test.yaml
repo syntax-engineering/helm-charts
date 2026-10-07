@@ -112,3 +112,42 @@ tests:
       - equal:
           path: "spec.template.spec.containers[0].volumeMounts"
           value: [{ name: nginx-config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf }]
+
+  - it: names the port and Service port with portName
+    template: templates/deployment.yaml
+    set: { workloads.web.portName: grpc }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].ports'
+          value: [{ containerPort: 8080, name: grpc, protocol: TCP }]
+
+  - it: targets portName from the Service
+    template: templates/service.yaml
+    set: { workloads.web.portName: grpc }
+    asserts:
+      - equal:
+          path: spec.ports
+          value: [{ name: grpc, port: 8080, protocol: TCP, targetPort: grpc }]
+
+  - it: uses tcpSocket on the named port when probeType is tcp
+    template: templates/deployment.yaml
+    set: { workloads.web.probeType: tcp, workloads.web.portName: mcp }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].livenessProbe'
+          value: { tcpSocket: { port: mcp }, failureThreshold: 6, periodSeconds: 10, timeoutSeconds: 5 }
+
+  - it: uses the port number for tcp probes when the port is bare
+    template: templates/deployment.yaml
+    set: { workloads.web.probeType: tcp, workloads.web.compat.bareContainerPort: true }
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.tcpSocket', value: { port: 8080 } }
+
+  - it: uses a grpc handler on the port number when probeType is grpc
+    template: templates/deployment.yaml
+    set: { workloads.web.probeType: grpc }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].startupProbe'
+          value: { grpc: { port: 8080 }, failureThreshold: 60, periodSeconds: 5, timeoutSeconds: 3 }
+      - notExists: { path: 'spec.template.spec.containers[0].startupProbe.httpGet' }

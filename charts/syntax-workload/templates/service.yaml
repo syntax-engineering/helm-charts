@@ -14,13 +14,13 @@ spec:
   {{- end }}
   selector: {{- include "sw.selector" $c | nindent 4 }}
   ports:
-    - name: http
+    - name: {{ $w.portName | default "http" }}
       port: {{ $w.port }}
       {{- if dig "compat" "bareContainerPort" false $w }}
       targetPort: {{ $w.port }}
       {{- else }}
       protocol: TCP
-      targetPort: http
+      targetPort: {{ $w.portName | default "http" }}
       {{- end }}
 {{- end }}
 {{- end }}

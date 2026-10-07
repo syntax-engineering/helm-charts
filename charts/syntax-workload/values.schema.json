@@ -178,6 +178,8 @@
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "healthPath": { "type": "string", "pattern": "^/" },
+        "probeType": { "enum": ["http", "tcp", "grpc"], "description": "Probe handler: httpGet on healthPath, tcpSocket on the port, or grpc on the port number" },
+        "portName": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 15 },
         "probes": { "$ref": "#/$defs/probes" },
         "serviceName": { "type": "string", "minLength": 1 },
         "serviceType": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
@@ -196,7 +198,14 @@
           "if": { "properties": { "kind": { "const": "Web" } } },
           "then": {
             "required": ["port", "replicas"],
-            "if": { "not": { "properties": { "probes": { "const": false } }, "required": ["probes"] } },
+            "if": {
+              "not": {
+                "anyOf": [
+                  { "properties": { "probes": { "const": false } }, "required": ["probes"] },
+                  { "properties": { "probeType": { "enum": ["tcp", "grpc"] } }, "required": ["probeType"] }
+                ]
+              }
+            },
             "then": { "required": ["healthPath"] }
           }
         },

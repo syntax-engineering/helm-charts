@@ -89,3 +89,13 @@ tests:
     values: [schema/bad/selector-labels-role.yaml]
     asserts:
       - failedTemplate: { errorPattern: 'invalid propertyName .role.' }
+
+  - it: accepts tcp probes without a healthPath
+    values: [schema/good/web-tcp-probes.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects http probes without a healthPath
+    values: [schema/bad/web-http-probe-missing-health-path.yaml]
+    asserts:
+      - failedTemplate: {}

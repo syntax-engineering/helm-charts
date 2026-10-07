@@ -140,14 +140,22 @@ Fails the render when pods could be selected by the wrong workload. Rules:
 
 {{/* Ports and probes for Web containers, indented to sit under a container list item. */}}
 {{- define "sw.webContainer" -}}
+{{- $pname := .w.portName | default "http" }}
+{{- $bare := dig "compat" "bareContainerPort" false .w }}
 ports:
-{{- if dig "compat" "bareContainerPort" false .w }}
+{{- if $bare }}
   - containerPort: {{ .w.port }}
 {{- else }}
-  - { containerPort: {{ .w.port }}, name: http, protocol: TCP }
+  - { containerPort: {{ .w.port }}, name: {{ $pname }}, protocol: TCP }
 {{- end }}
 {{- if not (include "sw.isOff" .w.probes) }}
 {{- $get := dict "httpGet" (dict "path" .w.healthPath "port" .w.port "scheme" "HTTP") }}
+{{- $ptype := .w.probeType | default "http" }}
+{{- if eq $ptype "tcp" }}
+{{- $get = dict "tcpSocket" (dict "port" (ternary .w.port $pname $bare)) }}
+{{- else if eq $ptype "grpc" }}
+{{- $get = dict "grpc" (dict "port" .w.port) }}
+{{- end }}
 {{- $defaults := dict
   "startupProbe" (merge (dict "failureThreshold" 60 "periodSeconds" 5 "timeoutSeconds" 3) $get)
   "readinessProbe" (merge (dict "failureThreshold" 2 "periodSeconds" 3 "successThreshold" 1 "timeoutSeconds" 1) $get)
