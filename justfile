@@ -15,7 +15,7 @@ lint:
 unit:
     helm unittest {{chart}}
 
-# Check the chart still reproduces terra's manifests.
+# Check the chart still reproduces terra, lexicon, and syntax-direct.
 parity:
     scripts/test-parity.rb
 

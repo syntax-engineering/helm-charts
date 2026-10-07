@@ -1,0 +1,173 @@
+# syntax-direct rebuild: the workloads for kubernetes/overlays/rebuild at 30b775385. Expected output
+# is that overlay's rendered manifests plus the accepted changes listed in README.md.
+#
+# Settings marked "compat" reproduce the manifests this replaced; the migration removes them one
+# at a time.
+app: syntax-direct
+namespace: syntax-direct-rebuild
+image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825 # overlays rewrite name and tag with images:
+imagePullSecret: syntax-direct-registry-secret
+envFrom:
+  configMaps: [syntax-direct-config]
+  secrets: [syntax-direct-secrets, syntax-direct-terraform-secrets]
+prometheus:
+  serverAddress: http://kube-prometheus-stack-synt-prometheus.kube-prometheus-stack:9090
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    serviceName: syntax-direct-svc # compat
+    serviceType: NodePort # compat
+    serviceAccount: syntax-direct-sa
+    nodeSelector: { service: index-engine }
+    resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { cpu: 1000m, memory: 2Gi } }
+    vpa: { updateMode: InPlaceOrRecreate, max: { cpu: 2500m, memory: 3500Mi } }
+    replicas: { min: 1, max: 5, pinned: 2 } # pinned is compat
+    compat: { allowSingleReplica: true }
+    probes:
+      readiness: { initialDelaySeconds: 15 }
+    autoscaling:
+      metricName: http_requests_rate
+      query: 'sum(rate(http_requests_total{path!~"(/healthz|/metrics|/ahoy/events|/users/sign_in/metrics|/|/events)$"}[1m]))'
+      threshold: "2.00"
+      fallbackReplicas: 3
+      cooldownPeriod: 600
+      behavior: false # compat
+  assets:
+    kind: Web
+    image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825-assets # overlays rewrite name and tag with images:
+    port: 8082
+    healthPath: /500.html
+    serviceName: syntax-direct-assets-svc # compat
+    serviceType: NodePort # compat
+    serviceAccount: syntax-direct-assets-sa
+    nodeSelector: { service: index-engine }
+    envFrom: { configMaps: [], secrets: [] }
+    resources: false # compat
+    vpa: false # compat
+    replicas: 2
+    probes:
+      startup: false # compat
+      readiness: { initialDelaySeconds: 5 }
+      liveness: { failureThreshold: 3, initialDelaySeconds: 5, timeoutSeconds: 3 }
+    volumes:
+      - name: nginx-config
+        configMap: { name: syntax-direct-assets-nginx-config }
+    volumeMounts:
+      - { name: nginx-config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf }
+  mcp:
+    kind: Web
+    port: 9393
+    portName: mcp
+    probeType: tcp
+    probes:
+      readiness: { failureThreshold: 3, initialDelaySeconds: 15, periodSeconds: 10, timeoutSeconds: 3 }
+    serviceName: syntax-direct-mcp-svc # compat
+    serviceType: NodePort # compat
+    command: [bundle, exec, saidee-mcp-server]
+    nodeSelector: { service: index-engine }
+    resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { cpu: 1000m, memory: 2Gi } }
+    compat: { resizePolicy: false } # compat
+    vpa: false # compat
+    replicas: 4
+  grpc:
+    kind: Web
+    port: 9001
+    portName: grpc
+    extraPorts: [{ name: metrics, port: 9095 }]
+    probeType: grpc
+    probes:
+      readiness: { periodSeconds: 5, timeoutSeconds: 3 }
+    serviceName: syntax-direct-gruf-svc # compat
+    serviceType: NodePort # compat
+    serviceAnnotations: { projectcontour.io/upstream-protocol.h2c: "9001" }
+    serviceAccount: syntax-direct-grpc-sa
+    nodeSelector: { service: index-engine }
+    command: [bundle, exec, gruf]
+    args: [--host, "0.0.0.0:9001", --health-check]
+    env: [{ name: ENABLE_GRUF_METRICS_SERVER, value: "true" }]
+    vpa:
+      updateMode: InPlaceOrRecreate
+      controlledValues: RequestsAndLimits
+      min: { cpu: 500m, memory: 1500Mi }
+      max: { cpu: 1300m, memory: 3Gi }
+    replicas: { min: 15, max: 20, pinned: 15 } # pinned is compat
+    compat: { resizePolicy: false, scaleTargetRef: full } # compat
+    autoscaling:
+      metricName: grpc_requests_in_flight
+      query: sum(gruf_requests_in_flight)
+      threshold: "8"
+      fallbackReplicas: 15
+      cooldownPeriod: 1000
+      pollingInterval: 30
+      behavior: false # compat
+  index-portal-frontend:
+    kind: Web
+    app: syntax-direct-index-portal-frontend
+    role: false # compat
+    strategy: false # compat
+    image: ghcr.io/locusanalytics/index_portal_rebuild:placeholder # overlays patch the image
+    port: 3000
+    probeType: tcp
+    probes:
+      startup: false # compat
+      readiness: { failureThreshold: 2, periodSeconds: 5, timeoutSeconds: 3 }
+      liveness: { failureThreshold: 3, initialDelaySeconds: 5, periodSeconds: 10, timeoutSeconds: 3 }
+    nodeSelector: { service: index-engine }
+    envFrom: { configMaps: [], secrets: [] }
+    env:
+      - name: MAINTENANCE_MODE
+        valueFrom: { secretKeyRef: { name: syntax-index-engine-secrets, key: MAINTENANCE_MODE } }
+      - name: REACT_APP_API_URL
+        value: https://grpc.rebuild.direct.syntaxdata.com:443
+    resources: false # compat
+    vpa: false # compat
+    replicas: 2
+  sidekiq-worker-default:
+    kind: Worker
+    role: worker
+    command: [bundle, exec, sidekiq]
+    serviceAccount: syntax-direct-sidekiq-sa
+    nodeSelector: { service: index-engine }
+    resources: { requests: { cpu: 1000m, memory: 1Gi }, limits: { cpu: 2000m, memory: 2Gi } }
+    vpa: { updateMode: InPlaceOrRecreate, max: { cpu: 1300m, memory: 3500Mi } }
+    names: { vpa: syntax-direct-sidekiq-default-worker-vpa } # compat
+    replicas: { min: 2, max: 4, pinned: 2 } # pinned is compat
+    autoscaling:
+      metricName: sidekiq_latency_max
+      query: 'max(sidekiq_queue_latency_seconds{name=~"default|mailers|active_storage_analysis|active_storage_purge|action_mailbox_routing|action_mailbox_incineration"})'
+      threshold: "100"
+      fallbackReplicas: 2
+      cooldownPeriod: 600
+      pollingInterval: 30
+      behavior: false # compat
+  sidekiq-dataloader-worker:
+    kind: Worker
+    role: dataloader-worker
+    command: [bundle, exec, sidekiq, -C, config/sidekiq_dataloader.yml]
+    serviceAccount: syntax-direct-sidekiq-sa
+    nodeSelector: { service: index-engine }
+    resources: { requests: { cpu: 1000m, memory: 1Gi }, limits: { cpu: 2000m, memory: 2Gi } }
+    vpa: false # compat
+    replicas: 2
+  maintenance-prune-invalidated-tokens:
+    kind: CronJob
+    fullName: maintenance-prune-invalidated-tokens # compat
+    containerName: syntax-direct-cron-job-maintenance-prune-invalidated-tokens # compat
+    role: cron-job
+    schedule: "0 * * * *"
+    command: [bundle, exec, rake, "maintenance:prune_invalidated_tokens"]
+    envFrom: { configMaps: [syntax-direct-config], secrets: [syntax-direct-secrets] }
+    resources: false # compat
+    concurrencyPolicy: false # compat
+    successfulJobsHistoryLimit: false # compat
+    failedJobsHistoryLimit: false # compat
+    activeDeadlineSeconds: false # compat
+  migrate-db:
+    kind: Hook
+    phase: PreSync
+    command: [bundle, exec, rake, "db:migrate"]
+    serviceAccount: syntax-direct-sa
+    resources: false # compat
+    activeDeadlineSeconds: false # compat

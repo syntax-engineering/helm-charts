@@ -10,7 +10,7 @@ in. Apps render it from their Kustomize overlays with `helmCharts:`.
 helmCharts:
   - name: syntax-workload
     repo: oci://ghcr.io/syntax-engineering/charts
-    version: 0.2.0
+    version: 0.3.0
     releaseName: <app>
     valuesFile: ../../base/workloads/values.yml
     additionalValuesFiles: [workloads.values.yml]
@@ -39,7 +39,7 @@ Argo CD must run Kustomize with `--enable-helm --load-restrictor LoadRestriction
 
 | Kind | Required | Generates |
 |---|---|---|
-| `Web` | `port`, `replicas`, `healthPath` (unless `probes: false`) | Deployment, Service, PDB, VPA, ScaledObject when autoscaling |
+| `Web` | `port`, `replicas`, `healthPath` (only for `probeType: http`, unless `probes: false`) | Deployment, Service, PDB, VPA, ScaledObject when autoscaling |
 | `Worker` | `replicas` | Deployment, PDB, VPA, ScaledObject when autoscaling |
 | `CronJob` | `schedule`, `command` | CronJob |
 | `Hook` | `phase` (`PreSync`, `Sync`, `PostSync`), `command` | Job with Argo CD hook annotations |
@@ -49,6 +49,19 @@ Argo CD must run Kustomize with `--enable-helm --load-restrictor LoadRestriction
 Every workload can set `command`, `args`, `env`, `envFrom`, `serviceAccount`, `nodeSelector`,
 `priorityClassName` (`false` omits it), `resources`, `volumes`, `volumeMounts`, `selectorLabels`, and
 `enabled: false`.
+
+Web workloads can also set `probeType`, `portName`, `extraPorts`, and `serviceAnnotations`:
+
+- `probeType` is `http` (the default, an `httpGet` on `healthPath`), `tcp` (a `tcpSocket` on the
+  port), or `grpc` (the gRPC health check on the port number).
+- `portName` names the container port, the Service port, and the Service `targetPort`. It defaults
+  to `http`.
+- `extraPorts` is a list of `{name, port}` added to the container and not exposed by the Service.
+  Workers can set it too.
+- `serviceAnnotations` is a map copied onto the Service.
+
+`app` overrides the `app` label in a workload's selector and labels. It does not change the
+`<app>-` name prefix. Set `role: false` to drop the `role` label from the selector.
 
 `selectorLabels` adds labels to the workload's selector, pod labels, spread, PDB, and Service. Use it
 when several workloads share a `role`. Selectors are immutable, so set it once. Deployments and
@@ -80,10 +93,14 @@ removes them one small PR at a time. Treat any that remain as documented one-off
 
 | Setting | Effect |
 |---|---|
-| `fullName`, `containerName`, `role`, `serviceName`, `names.{pdb,vpa,scaledObject}` | Keep legacy names and selectors |
+| `fullName`, `containerName`, `role`, `app`, `serviceName`, `names.{pdb,vpa,scaledObject}` | Keep legacy names and selectors |
 | `replicas.pinned` | Keep `spec.replicas` on a KEDA-managed Deployment |
 | `compat.allowSingleReplica` | Allow 1 replica |
 | `compat.bareContainerPort` | Unnamed container port; Service targets the port number |
+| `compat.resizePolicy: false` | Omit the container `resizePolicy` |
+| `compat.scaleTargetRef: full` | Add `apiVersion` and `kind` to the ScaledObject `scaleTargetRef` |
+| `vpa.controlledValues` | `RequestsOnly` (default) or `RequestsAndLimits` |
+| `role: false` | Drop the `role` selector label |
 | `pdb`, `vpa`, `probes`, `strategy`, `resources` set to `false` | Omit that default |
 | `probes.{startup,readiness,liveness}` | Merge timing over a default probe, or `false` to drop it |
 | `pdb: {minAvailable: N}` | Replace the default budget |

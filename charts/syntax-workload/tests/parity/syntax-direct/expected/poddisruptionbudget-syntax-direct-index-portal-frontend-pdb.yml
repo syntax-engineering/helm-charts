@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: syntax-direct-index-portal-frontend-pdb
+  namespace: syntax-direct-rebuild
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: syntax-direct-index-portal-frontend

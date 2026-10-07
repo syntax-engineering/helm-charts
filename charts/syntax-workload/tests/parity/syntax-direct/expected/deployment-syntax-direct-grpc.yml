@@ -1,0 +1,95 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: syntax-direct
+    role: grpc
+  name: syntax-direct-grpc
+  namespace: syntax-direct-rebuild
+spec:
+  replicas: 15
+  selector:
+    matchLabels:
+      app: syntax-direct
+      role: grpc
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: syntax-direct
+        role: grpc
+    spec:
+      containers:
+        - args:
+            - --host
+            - 0.0.0.0:9001
+            - --health-check
+          command:
+            - bundle
+            - exec
+            - gruf
+          env:
+            - name: ENABLE_GRUF_METRICS_SERVER
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: syntax-direct-config
+            - secretRef:
+                name: syntax-direct-secrets
+            - secretRef:
+                name: syntax-direct-terraform-secrets
+          image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825
+          livenessProbe:
+            failureThreshold: 6
+            grpc:
+              port: 9001
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: syntax-direct-grpc
+          ports:
+            - containerPort: 9001
+              name: grpc
+              protocol: TCP
+            - containerPort: 9095
+              name: metrics
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 2
+            grpc:
+              port: 9001
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+          startupProbe:
+            failureThreshold: 60
+            grpc:
+              port: 9001
+            periodSeconds: 5
+            timeoutSeconds: 3
+      imagePullSecrets:
+        - name: syntax-direct-registry-secret
+      nodeSelector:
+        service: index-engine
+      serviceAccountName: syntax-direct-grpc-sa
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: syntax-direct
+              role: grpc
+          matchLabelKeys:
+            - pod-template-hash
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway

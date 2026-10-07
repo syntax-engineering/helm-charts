@@ -1,0 +1,69 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: syntax-direct
+    role: dataloader-worker
+  name: syntax-direct-sidekiq-dataloader-worker
+  namespace: syntax-direct-rebuild
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: syntax-direct
+      role: dataloader-worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: syntax-direct
+        role: dataloader-worker
+    spec:
+      containers:
+        - command:
+            - bundle
+            - exec
+            - sidekiq
+            - -C
+            - config/sidekiq_dataloader.yml
+          envFrom:
+            - configMapRef:
+                name: syntax-direct-config
+            - secretRef:
+                name: syntax-direct-secrets
+            - secretRef:
+                name: syntax-direct-terraform-secrets
+          image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825
+          name: syntax-direct-sidekiq-dataloader-worker
+          resizePolicy:
+            - resourceName: cpu
+              restartPolicy: NotRequired
+            - resourceName: memory
+              restartPolicy: NotRequired
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+            requests:
+              cpu: 1000m
+              memory: 1Gi
+      imagePullSecrets:
+        - name: syntax-direct-registry-secret
+      nodeSelector:
+        service: index-engine
+      serviceAccountName: syntax-direct-sidekiq-sa
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: syntax-direct
+              role: dataloader-worker
+          matchLabelKeys:
+            - pod-template-hash
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway

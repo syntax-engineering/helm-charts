@@ -1,0 +1,25 @@
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: syntax-direct-grpc-hpa
+  namespace: syntax-direct-rebuild
+spec:
+  cooldownPeriod: 1000
+  fallback:
+    failureThreshold: 3
+    replicas: 15
+  maxReplicaCount: 20
+  minReplicaCount: 15
+  pollingInterval: 30
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: syntax-direct-grpc
+  triggers:
+    - metadata:
+        query: sum(gruf_requests_in_flight)
+        serverAddress: http://kube-prometheus-stack-synt-prometheus.kube-prometheus-stack:9090
+        threshold: "8"
+      name: grpc_requests_in_flight
+      type: prometheus
