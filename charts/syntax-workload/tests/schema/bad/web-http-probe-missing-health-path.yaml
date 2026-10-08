@@ -1,0 +1,9 @@
+app: demo
+namespace: demo
+image: example/demo:1
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    probeType: http
+    replicas: 2

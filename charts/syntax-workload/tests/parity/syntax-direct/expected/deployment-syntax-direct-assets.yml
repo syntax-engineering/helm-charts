@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: syntax-direct
+    role: assets
+  name: syntax-direct-assets
+  namespace: syntax-direct-rebuild
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: syntax-direct
+      role: assets
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: syntax-direct
+        role: assets
+    spec:
+      containers:
+        - image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825-assets
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /500.html
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          name: syntax-direct-assets
+          ports:
+            - containerPort: 8082
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /500.html
+              port: 8082
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+            - mountPath: /etc/nginx/nginx.conf
+              name: nginx-config
+              subPath: nginx.conf
+      imagePullSecrets:
+        - name: syntax-direct-registry-secret
+      nodeSelector:
+        service: index-engine
+      serviceAccountName: syntax-direct-assets-sa
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: syntax-direct
+              role: assets
+          matchLabelKeys:
+            - pod-template-hash
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+      volumes:
+        - configMap:
+            name: syntax-direct-assets-nginx-config
+          name: nginx-config

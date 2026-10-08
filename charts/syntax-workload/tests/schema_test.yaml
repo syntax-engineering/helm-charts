@@ -89,3 +89,38 @@ tests:
     values: [schema/bad/selector-labels-role.yaml]
     asserts:
       - failedTemplate: { errorPattern: 'invalid propertyName .role.' }
+
+  - it: accepts tcp probes without a healthPath
+    values: [schema/good/web-tcp-probes.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects http probes without a healthPath
+    values: [schema/bad/web-http-probe-missing-health-path.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: "missing property .healthPath." }
+
+  - it: rejects portName that is all digits
+    values: [schema/bad/port-name-digits.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'not.* failed' }
+
+  - it: rejects portName with a double dash
+    values: [schema/bad/port-name-double-dash.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'not.* failed' }
+
+  - it: rejects extraPorts name that is all digits
+    values: [schema/bad/extra-port-name-digits.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'not.* failed' }
+
+  - it: rejects extraPorts name with a double dash
+    values: [schema/bad/extra-port-name-double-dash.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'not.* failed' }
+
+  - it: rejects extraPorts on a CronJob
+    values: [schema/bad/cron-with-extra-ports.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'not.* failed' }

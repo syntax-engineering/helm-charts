@@ -1,0 +1,32 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  name: syntax-direct-migrate-db
+  namespace: syntax-direct-rebuild
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+        - command:
+            - bundle
+            - exec
+            - rake
+            - db:migrate
+          envFrom:
+            - configMapRef:
+                name: syntax-direct-config
+            - secretRef:
+                name: syntax-direct-secrets
+            - secretRef:
+                name: syntax-direct-terraform-secrets
+          image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825
+          name: syntax-direct-migrate-db
+      imagePullSecrets:
+        - name: syntax-direct-registry-secret
+      restartPolicy: Never
+      serviceAccountName: syntax-direct-sa

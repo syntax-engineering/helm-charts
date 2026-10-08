@@ -1,0 +1,9 @@
+app: demo
+namespace: demo
+image: example/demo:1
+workloads:
+  nightly:
+    kind: CronJob
+    schedule: "0 3 * * *"
+    command: [rake, x]
+    extraPorts: [{name: metrics, port: 9000}]

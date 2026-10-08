@@ -1,0 +1,10 @@
+app: demo
+namespace: demo
+image: example/demo:1
+workloads:
+  mcp:
+    kind: Web
+    port: 9393
+    portName: mcp
+    probeType: tcp
+    replicas: 2

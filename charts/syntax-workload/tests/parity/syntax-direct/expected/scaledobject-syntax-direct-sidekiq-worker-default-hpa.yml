@@ -1,0 +1,23 @@
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: syntax-direct-sidekiq-worker-default-hpa
+  namespace: syntax-direct-rebuild
+spec:
+  cooldownPeriod: 600
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  maxReplicaCount: 4
+  minReplicaCount: 2
+  pollingInterval: 30
+  scaleTargetRef:
+    name: syntax-direct-sidekiq-worker-default
+  triggers:
+    - metadata:
+        query: max(sidekiq_queue_latency_seconds{name=~"default|mailers|active_storage_analysis|active_storage_purge|action_mailbox_routing|action_mailbox_incineration"})
+        serverAddress: http://kube-prometheus-stack-synt-prometheus.kube-prometheus-stack:9090
+        threshold: "100"
+      name: sidekiq_latency_max
+      type: prometheus

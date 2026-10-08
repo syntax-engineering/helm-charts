@@ -1,0 +1,26 @@
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: syntax-direct-sidekiq-default-worker-vpa
+  namespace: syntax-direct-rebuild
+spec:
+  resourcePolicy:
+    containerPolicies:
+      - containerName: syntax-direct-sidekiq-worker-default
+        controlledResources:
+          - cpu
+          - memory
+        controlledValues: RequestsOnly
+        maxAllowed:
+          cpu: 1300m
+          memory: 3500Mi
+        minAllowed:
+          cpu: 500m
+          memory: 1Gi
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: syntax-direct-sidekiq-worker-default
+  updatePolicy:
+    updateMode: InPlaceOrRecreate

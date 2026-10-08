@@ -10,6 +10,10 @@ metadata:
   namespace: {{ $.Values.namespace }}
 spec:
   scaleTargetRef:
+    {{- if eq (dig "compat" "scaleTargetRef" "" $w) "full" }}
+    apiVersion: apps/v1
+    kind: Deployment
+    {{- end }}
     name: {{ include "sw.fullname" $c }}
   minReplicaCount: {{ $w.replicas.min }}
   maxReplicaCount: {{ $w.replicas.max }}

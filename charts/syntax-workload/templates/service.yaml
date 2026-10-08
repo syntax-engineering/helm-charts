@@ -8,19 +8,22 @@ metadata:
   name: {{ $w.serviceName | default (include "sw.fullname" $c) }}
   namespace: {{ $.Values.namespace }}
   labels: {{- include "sw.selector" $c | nindent 4 }}
+  {{- with $w.serviceAnnotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   {{- with $w.serviceType }}
   type: {{ . }}
   {{- end }}
   selector: {{- include "sw.selector" $c | nindent 4 }}
   ports:
-    - name: http
+    - name: {{ $w.portName | default "http" }}
       port: {{ $w.port }}
       {{- if dig "compat" "bareContainerPort" false $w }}
       targetPort: {{ $w.port }}
       {{- else }}
       protocol: TCP
-      targetPort: http
+      targetPort: {{ $w.portName | default "http" }}
       {{- end }}
 {{- end }}
 {{- end }}

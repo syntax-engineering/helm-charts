@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: syntax-direct-index-portal-frontend
+  namespace: syntax-direct-rebuild
+  labels:
+    app: syntax-direct-index-portal-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: syntax-direct-index-portal-frontend
+  template:
+    metadata:
+      labels:
+        app: syntax-direct-index-portal-frontend
+    spec:
+      containers:
+        - env:
+            - name: MAINTENANCE_MODE
+              valueFrom:
+                secretKeyRef:
+                  key: MAINTENANCE_MODE
+                  name: syntax-index-engine-secrets
+            - name: REACT_APP_API_URL
+              value: https://grpc.rebuild.direct.syntaxdata.com:443
+          image: ghcr.io/locusanalytics/index_portal_rebuild:placeholder
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            tcpSocket:
+              port: http
+            timeoutSeconds: 3
+          name: syntax-direct-index-portal-frontend
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 2
+            periodSeconds: 5
+            tcpSocket:
+              port: http
+            timeoutSeconds: 3
+            successThreshold: 1
+      imagePullSecrets:
+        - name: syntax-direct-registry-secret
+      nodeSelector:
+        service: index-engine
+      topologySpreadConstraints:
+        - labelSelector:
+            matchLabels:
+              app: syntax-direct-index-portal-frontend
+          matchLabelKeys:
+            - pod-template-hash
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway

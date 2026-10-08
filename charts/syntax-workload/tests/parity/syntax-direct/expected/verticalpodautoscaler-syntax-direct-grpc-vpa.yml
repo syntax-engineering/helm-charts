@@ -1,0 +1,26 @@
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: syntax-direct-grpc-vpa
+  namespace: syntax-direct-rebuild
+spec:
+  resourcePolicy:
+    containerPolicies:
+      - containerName: syntax-direct-grpc
+        controlledResources:
+          - cpu
+          - memory
+        controlledValues: RequestsAndLimits
+        maxAllowed:
+          cpu: 1300m
+          memory: 3Gi
+        minAllowed:
+          cpu: 500m
+          memory: 1500Mi
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: syntax-direct-grpc
+  updatePolicy:
+    updateMode: InPlaceOrRecreate

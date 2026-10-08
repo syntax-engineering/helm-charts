@@ -10,7 +10,8 @@
 {{- end }}
 
 {{- define "sw.selector" -}}
-{{- $labels := dict "app" .root.Values.app "role" (include "sw.role" .) -}}
+{{- $labels := dict "app" (.w.app | default .root.Values.app) -}}
+{{- if not (include "sw.isOff" .w.role) }}{{ $_ := set $labels "role" (include "sw.role" .) }}{{ end -}}
 {{- toYaml (merge $labels (.w.selectorLabels | default dict)) -}}
 {{- end }}
 
@@ -59,9 +60,17 @@
   {{- end }}
   {{- with include "sw.resources" . }}
   resources: {{- . | nindent 4 }}
+  {{- if ne (dig "compat" "resizePolicy" true $.w) false }}
   resizePolicy:
     - { resourceName: cpu, restartPolicy: NotRequired }
     - { resourceName: memory, restartPolicy: NotRequired }
+  {{- end }}
+  {{- end }}
+  {{- if and (eq .w.kind "Worker") .w.extraPorts }}
+  ports:
+    {{- range .w.extraPorts }}
+    - { containerPort: {{ .port }}, name: {{ .name }}, protocol: TCP }
+    {{- end }}
   {{- end }}
   {{- if eq .w.kind "Web" }}
   {{- include "sw.webContainer" . | nindent 2 }}
@@ -120,7 +129,7 @@ Fails the render when pods could be selected by the wrong workload. Rules:
 {{- if ne (get $bsel $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
 {{- end -}}
 {{- if get $match "all" -}}
-{{- fail (printf "the selector of workload %q would also match the pods of workload %q; give one of them a different role or selectorLabels" $aname $bname) -}}
+{{- fail (printf "the selector of workload %q would also match the pods of workload %q; give one of them a different app, role, or selectorLabels" $aname $bname) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -132,7 +141,7 @@ Fails the render when pods could be selected by the wrong workload. Rules:
 {{- if ne (get $labels $k) $v -}}{{- $_ := set $match "all" false -}}{{- end -}}
 {{- end -}}
 {{- if get $match "all" -}}
-{{- fail (printf "CronJob workload %q has pod labels that match the selector of workload %q; give one of them a different role or selectorLabels" $cname $dname) -}}
+{{- fail (printf "CronJob workload %q has pod labels that match the selector of workload %q; give one of them a different app, role, or selectorLabels" $cname $dname) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -140,14 +149,26 @@ Fails the render when pods could be selected by the wrong workload. Rules:
 
 {{/* Ports and probes for Web containers, indented to sit under a container list item. */}}
 {{- define "sw.webContainer" -}}
+{{- $pname := .w.portName | default "http" }}
+{{- $bare := dig "compat" "bareContainerPort" false .w }}
 ports:
-{{- if dig "compat" "bareContainerPort" false .w }}
+{{- if $bare }}
   - containerPort: {{ .w.port }}
 {{- else }}
-  - { containerPort: {{ .w.port }}, name: http, protocol: TCP }
+  - { containerPort: {{ .w.port }}, name: {{ $pname }}, protocol: TCP }
+{{- end }}
+{{- range .w.extraPorts }}
+{{- if eq .name $pname }}{{ fail (printf "extraPorts entry %q reuses the port name of the main port" .name) }}{{ end }}
+  - { containerPort: {{ .port }}, name: {{ .name }}, protocol: TCP }
 {{- end }}
 {{- if not (include "sw.isOff" .w.probes) }}
 {{- $get := dict "httpGet" (dict "path" .w.healthPath "port" .w.port "scheme" "HTTP") }}
+{{- $ptype := .w.probeType | default "http" }}
+{{- if eq $ptype "tcp" }}
+{{- $get = dict "tcpSocket" (dict "port" (ternary .w.port $pname $bare)) }}
+{{- else if eq $ptype "grpc" }}
+{{- $get = dict "grpc" (dict "port" .w.port) }}
+{{- end }}
 {{- $defaults := dict
   "startupProbe" (merge (dict "failureThreshold" 60 "periodSeconds" 5 "timeoutSeconds" 3) $get)
   "readinessProbe" (merge (dict "failureThreshold" 2 "periodSeconds" 3 "successThreshold" 1 "timeoutSeconds" 1) $get)

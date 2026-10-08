@@ -72,3 +72,38 @@ tests:
       workloads.sweep: { kind: CronJob, role: sidekiq, schedule: "0 * * * *", command: [rake, sweep], enabled: false }
     asserts:
       - notFailedTemplate: {}
+
+  - it: uses a workload app and drops role when role is false
+    values:
+      - values/app-override.yaml
+    template: templates/deployment.yaml
+    set:
+      workloads:
+        portal: { kind: Web, port: 3000, probeType: tcp, replicas: 2, app: demo-portal, role: false }
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels
+          value: { app: demo-portal }
+        documentSelector: { path: metadata.name, value: demo-portal }
+
+  - it: fails when two role-less workloads share an app
+    values:
+      - values/app-override.yaml
+    template: templates/deployment.yaml
+    set:
+      workloads:
+        a: { kind: Web, port: 3000, probeType: tcp, replicas: 2, app: shared, role: false }
+        b: { kind: Web, port: 3001, probeType: tcp, replicas: 2, app: shared, role: false }
+    asserts:
+      - failedTemplate: { errorPattern: "would also match the pods" }
+
+  - it: fails when a role-less workload sits next to a roled workload of the same app
+    values:
+      - values/app-override.yaml
+    template: templates/deployment.yaml
+    set:
+      workloads:
+        a: { kind: Web, port: 3000, probeType: tcp, replicas: 2, app: demo, role: false }
+        b: { kind: Web, port: 3001, probeType: tcp, replicas: 2 }
+    asserts:
+      - failedTemplate: { errorPattern: "would also match the pods" }

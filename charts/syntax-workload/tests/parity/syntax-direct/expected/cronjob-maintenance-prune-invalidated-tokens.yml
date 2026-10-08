@@ -1,0 +1,32 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: maintenance-prune-invalidated-tokens
+  namespace: syntax-direct-rebuild
+spec:
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: syntax-direct
+            role: cron-job
+        spec:
+          containers:
+            - command:
+                - bundle
+                - exec
+                - rake
+                - maintenance:prune_invalidated_tokens
+              envFrom:
+                - configMapRef:
+                    name: syntax-direct-config
+                - secretRef:
+                    name: syntax-direct-secrets
+              image: ghcr.io/syntax-engineering/syntax_direct_rebuild:20261007183825
+              name: syntax-direct-cron-job-maintenance-prune-invalidated-tokens
+          imagePullSecrets:
+            - name: syntax-direct-registry-secret
+          restartPolicy: Never
+  schedule: 0 * * * *

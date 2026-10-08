@@ -112,3 +112,98 @@ tests:
       - equal:
           path: "spec.template.spec.containers[0].volumeMounts"
           value: [{ name: nginx-config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf }]
+
+  - it: names the port and Service port with portName
+    template: templates/deployment.yaml
+    set: { workloads.web.portName: grpc }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].ports'
+          value: [{ containerPort: 8080, name: grpc, protocol: TCP }]
+
+  - it: targets portName from the Service
+    template: templates/service.yaml
+    set: { workloads.web.portName: grpc }
+    asserts:
+      - equal:
+          path: spec.ports
+          value: [{ name: grpc, port: 8080, protocol: TCP, targetPort: grpc }]
+
+  - it: uses tcpSocket on the named port when probeType is tcp
+    template: templates/deployment.yaml
+    set: { workloads.web.probeType: tcp, workloads.web.portName: mcp }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].livenessProbe'
+          value: { tcpSocket: { port: mcp }, failureThreshold: 6, periodSeconds: 10, timeoutSeconds: 5 }
+
+  - it: uses the port number for tcp probes when the port is bare
+    template: templates/deployment.yaml
+    set: { workloads.web.probeType: tcp, workloads.web.compat.bareContainerPort: true }
+    asserts:
+      - equal: { path: 'spec.template.spec.containers[0].readinessProbe.tcpSocket', value: { port: 8080 } }
+
+  - it: uses a grpc handler on the port number when probeType is grpc
+    template: templates/deployment.yaml
+    set: { workloads.web.probeType: grpc }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].startupProbe'
+          value: { grpc: { port: 8080 }, failureThreshold: 60, periodSeconds: 5, timeoutSeconds: 3 }
+      - notExists: { path: 'spec.template.spec.containers[0].startupProbe.httpGet' }
+
+  - it: adds extra container ports after the main port
+    template: templates/deployment.yaml
+    set: { workloads.web.extraPorts: [{ name: metrics, port: 9095 }] }
+    asserts:
+      - equal:
+          path: 'spec.template.spec.containers[0].ports'
+          value:
+            - { containerPort: 8080, name: http, protocol: TCP }
+            - { containerPort: 9095, name: metrics, protocol: TCP }
+
+  - it: does not expose extra ports on the Service
+    template: templates/service.yaml
+    set: { workloads.web.extraPorts: [{ name: metrics, port: 9095 }] }
+    asserts:
+      - lengthEqual: { path: spec.ports, count: 1 }
+
+  - it: fails when an extra port reuses the main port name
+    template: templates/deployment.yaml
+    set: { workloads.web.extraPorts: [{ name: http, port: 9095 }] }
+    asserts:
+      - failedTemplate: { errorPattern: "reuses the port name" }
+
+  - it: annotates the Service
+    template: templates/service.yaml
+    set: { workloads.web.serviceAnnotations: { projectcontour.io/upstream-protocol.h2c: "8080" } }
+    asserts:
+      - equal: { path: metadata.annotations, value: { projectcontour.io/upstream-protocol.h2c: "8080" } }
+
+  - it: omits resizePolicy when compat.resizePolicy is false
+    template: templates/deployment.yaml
+    set: { workloads.web.compat.resizePolicy: false }
+    asserts:
+      - exists: { path: 'spec.template.spec.containers[0].resources' }
+      - notExists: { path: 'spec.template.spec.containers[0].resizePolicy' }
+
+  - it: emits apiVersion and kind in scaleTargetRef when compat.scaleTargetRef is full
+    template: templates/scaledobject.yaml
+    set: { workloads.web.compat.scaleTargetRef: full }
+    asserts:
+      - equal: { path: spec.scaleTargetRef, value: { apiVersion: apps/v1, kind: Deployment, name: acme-web } }
+
+  - it: defaults VPA controlledValues to RequestsOnly
+    template: templates/vpa.yaml
+    asserts:
+      - equal:
+          path: 'spec.resourcePolicy.containerPolicies[0].controlledValues'
+          value: RequestsOnly
+
+  - it: accepts RequestsAndLimits for VPA controlledValues
+    template: templates/vpa.yaml
+    set: { workloads.web.vpa.controlledValues: RequestsAndLimits }
+    asserts:
+      - equal:
+          path: 'spec.resourcePolicy.containerPolicies[0].controlledValues'
+          value: RequestsAndLimits
