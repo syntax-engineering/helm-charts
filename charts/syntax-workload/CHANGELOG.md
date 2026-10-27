@@ -22,6 +22,9 @@ Added (all optional):
     to another Service: extra `HTTPRoute` rules or `HTTPProxy` routes. `/` still goes to the
     workload's Service.
   - `tailscale`: an `Ingress` with `ingressClassName: tailscale` on the workload's Service port.
+  - `name` on any entry replaces the `<fullname>-<entry>` object name, so an entry can be renamed
+    without replacing its objects. The render fails if two entries with the same backend would use
+    the same name.
 
 ## [0.3.0] - 2026-10-07
 

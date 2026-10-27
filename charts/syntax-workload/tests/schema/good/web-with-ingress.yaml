@@ -14,6 +14,7 @@ workloads:
         paths: [{ prefix: /assets, service: acme-assets-svc, port: 80 }]
       grpc:
         backend: contour
+        name: acme-gruf
         hostnames: [grpc.acme.example.com]
         paths: [{ prefix: /packs, service: acme-assets-svc, port: 80 }]
       tailnet:

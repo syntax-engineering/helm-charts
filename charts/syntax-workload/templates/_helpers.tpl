@@ -186,8 +186,9 @@ ports:
 
 {{/* Ingress helpers take the workload context plus "key" (entry name) and "in" (entry). */}}
 
+{{/* "name" replaces <fullname>-<entry>, so an entry can keep its objects' names when it is renamed. */}}
 {{- define "sw.ingressName" -}}
-{{- printf "%s-%s" (include "sw.fullname" .) .key -}}
+{{- .in.name | default (printf "%s-%s" (include "sw.fullname" .) .key) -}}
 {{- end }}
 
 {{- define "sw.ingressService" -}}
@@ -233,6 +234,31 @@ same Gateway, or would write the same TLS Secret in one namespace.
 {{- end -}}
 {{- $_ := set $gateways $gw $id -}}
 {{- $_ := set $secrets $secret $id -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Fails the render when two entries of one backend would render objects with the
+same name. Takes dict "root" $ "backend" <backend>.
+*/}}
+{{- define "sw.assertUniqueIngressNames" -}}
+{{- $seen := dict -}}
+{{- $root := .root -}}
+{{- $backend := .backend -}}
+{{- range $name, $w := $root.Values.workloads -}}
+{{- if and (eq $w.kind "Web") (ne $w.enabled false) -}}
+{{- range $key, $in := $w.ingress -}}
+{{- if and (eq $in.backend $backend) (ne $in.enabled false) -}}
+{{- $c := dict "root" $root "name" $name "w" $w "key" $key "in" $in -}}
+{{- $id := printf "%s/%s" $name $key -}}
+{{- $objName := include "sw.ingressName" $c -}}
+{{- with get $seen $objName -}}
+{{- fail (printf "%s entries %q and %q would both render objects named %s; change name on one of them" $backend . $id $objName) -}}
+{{- end -}}
+{{- $_ := set $seen $objName $id -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

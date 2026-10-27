@@ -140,6 +140,7 @@
       "properties": {
         "backend": { "enum": ["ngf", "contour", "tailscale"] },
         "enabled": { "type": "boolean" },
+        "name": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
         "annotations": { "$ref": "#/$defs/stringMap" },
         "hostnames": {
           "type": "array",
