@@ -18,6 +18,9 @@ Added (all optional):
     `className`. `tls.clusterIssuer` uses a ClusterIssuer instead.
   - `ngf` and `contour` share `tls.acme.{email,server,waitInsteadOfSelfCheck}` for the generated
     Issuer.
+  - `ngf` and `contour` take `paths: [{prefix, service, port}]`, which sends extra path prefixes
+    to another Service: extra `HTTPRoute` rules or `HTTPProxy` routes. `/` still goes to the
+    workload's Service.
   - `tailscale`: an `Ingress` with `ingressClassName: tailscale` on the workload's Service port.
 
 ## [0.3.0] - 2026-10-07

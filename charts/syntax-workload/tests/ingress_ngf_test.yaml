@@ -178,6 +178,36 @@ tests:
             - type: ResponseHeaderModifier
               responseHeaderModifier: { set: [{ name: Strict-Transport-Security, value: max-age=2592000; includeSubDomains }] }
 
+  - it: sends extra path prefixes to other Services, with the same response headers
+    set:
+      workloads.web.ingress.public:
+        responseHeaders: { X-Frame-Options: DENY }
+        paths:
+          - { prefix: /assets, service: acme-assets-svc, port: 80 }
+          - { prefix: /packs, service: acme-assets-svc, port: 80 }
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.rules
+          value:
+            - matches: [{ path: { type: PathPrefix, value: / } }]
+              filters: [{ type: ResponseHeaderModifier, responseHeaderModifier: { set: [{ name: X-Frame-Options, value: DENY }] } }]
+              backendRefs: [{ group: '', kind: Service, name: acme-web, port: 8080 }]
+            - matches: [{ path: { type: PathPrefix, value: /assets } }]
+              filters: [{ type: ResponseHeaderModifier, responseHeaderModifier: { set: [{ name: X-Frame-Options, value: DENY }] } }]
+              backendRefs: [{ group: '', kind: Service, name: acme-assets-svc, port: 80 }]
+            - matches: [{ path: { type: PathPrefix, value: /packs } }]
+              filters: [{ type: ResponseHeaderModifier, responseHeaderModifier: { set: [{ name: X-Frame-Options, value: DENY }] } }]
+              backendRefs: [{ group: '', kind: Service, name: acme-assets-svc, port: 80 }]
+
+  # The redirect route covers every path already, so path rules leave it alone.
+  - it: keeps one catch-all redirect rule when paths are set
+    set:
+      workloads.web.ingress.public.paths: [{ prefix: /assets, service: acme-assets-svc, port: 80 }]
+    documentIndex: 3
+    asserts:
+      - lengthEqual: { path: spec.rules, count: 1 }
+
   # The HTTP listeners stay: cert-manager's HTTP-01 challenge needs port 80.
   - it: drops only the redirect route when redirectHttp is false
     set: { workloads.web.ingress.public.redirectHttp: false }

@@ -23,6 +23,8 @@ spec:
   secretName: {{ include "sw.ingressTlsSecret" $c }}
   issuerRef: { kind: {{ $issuerRef.kind }}, name: {{ $issuerRef.name }} }
   dnsNames: {{- toYaml $in.hostnames | nindent 4 }}
+{{- /* protocol describes the workload's Service, so path rules to other Services leave it out. */}}
+{{- $routes := prepend ($in.paths | default list) (dict "prefix" "/" "service" (include "sw.ingressService" $c) "port" $w.port "protocol" $in.protocol) }}
 {{- /* An HTTPProxy serves one fqdn, so each hostname gets its own. */}}
 {{- range $in.hostnames }}
 ---
@@ -47,11 +49,12 @@ spec:
     fqdn: {{ . | quote }}
     tls: { secretName: {{ include "sw.ingressTlsSecret" $c }} }
   routes:
-    - conditions: [{ prefix: / }]
+    {{- range $route := $routes }}
+    - conditions: [{ prefix: {{ $route.prefix }} }]
       services:
-        - name: {{ include "sw.ingressService" $c }}
-          port: {{ $w.port }}
-          {{- with $in.protocol }}
+        - name: {{ $route.service }}
+          port: {{ $route.port }}
+          {{- with $route.protocol }}
           protocol: {{ . }}
           {{- end }}
           {{- with $in.responseHeaders }}
@@ -64,6 +67,7 @@ spec:
       {{- with $in.timeout }}
       timeoutPolicy: { response: {{ . }}, idle: {{ . }} }
       {{- end }}
+    {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

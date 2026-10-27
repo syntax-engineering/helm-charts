@@ -150,6 +150,17 @@ tests:
     asserts:
       - failedTemplate: { errorPattern: '/ingress/tailnet.: .not. failed' }
 
+  - it: rejects path rules on a Tailscale entry
+    values: [schema/bad/ingress-tailscale-with-paths.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/tailnet.: .not. failed' }
+
+  # The default rule already sends / to the workload's Service.
+  - it: rejects a path rule for /
+    values: [schema/bad/ingress-path-root-prefix.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'prefix.: ./. does not match pattern' }
+
   - it: rejects an NGF-only field on a Contour entry
     values: [schema/bad/ingress-contour-with-ngf-field.yaml]
     asserts:

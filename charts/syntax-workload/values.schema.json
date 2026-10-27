@@ -167,6 +167,20 @@
           "not": { "required": ["clusterIssuer", "acme"] }
         },
         "responseHeaders": { "$ref": "#/$defs/stringMap" },
+        "paths": {
+          "type": "array",
+          "description": "Extra path prefixes sent to another Service. / always goes to the workload's Service.",
+          "items": {
+            "type": "object",
+            "required": ["prefix", "service", "port"],
+            "additionalProperties": false,
+            "properties": {
+              "prefix": { "type": "string", "pattern": "^/.+" },
+              "service": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        },
         "redirectHttp": { "type": "boolean" },
         "redirectStatusCode": { "enum": [301, 308] },
         "gateway": {
@@ -205,7 +219,7 @@
             "required": ["hostname"],
             "not": {
               "anyOf": [
-                { "required": ["hostnames"] }, { "required": ["tls"] }, { "required": ["responseHeaders"] }, { "required": ["gateway"] },
+                { "required": ["hostnames"] }, { "required": ["tls"] }, { "required": ["responseHeaders"] }, { "required": ["paths"] }, { "required": ["gateway"] },
                 { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }, { "required": ["className"] },
                 { "required": ["protocol"] }, { "required": ["timeout"] }
               ]

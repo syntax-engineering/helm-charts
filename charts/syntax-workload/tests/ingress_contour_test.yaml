@@ -113,6 +113,34 @@ tests:
                   responseHeadersPolicy: { set: [{ name: X-Frame-Options, value: DENY }] }
               timeoutPolicy: { response: 20m, idle: 20m }
 
+  # protocol describes the workload's Service, so only the default route gets it.
+  - it: sends extra path prefixes to other Services, with the same headers and timeout
+    set:
+      workloads.web.ingress.grpc:
+        protocol: h2c
+        timeout: 20m
+        responseHeaders: { X-Frame-Options: DENY }
+        paths:
+          - { prefix: /assets, service: acme-assets-svc, port: 80 }
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.routes
+          value:
+            - conditions: [{ prefix: / }]
+              services:
+                - name: acme-web
+                  port: 8080
+                  protocol: h2c
+                  responseHeadersPolicy: { set: [{ name: X-Frame-Options, value: DENY }] }
+              timeoutPolicy: { response: 20m, idle: 20m }
+            - conditions: [{ prefix: /assets }]
+              services:
+                - name: acme-assets-svc
+                  port: 80
+                  responseHeadersPolicy: { set: [{ name: X-Frame-Options, value: DENY }] }
+              timeoutPolicy: { response: 20m, idle: 20m }
+
   - it: renders one HTTPProxy per hostname, sharing one certificate
     set:
       workloads.web.ingress.grpc.hostnames: [grpc.acme.example.com, grpc.acme.example.org]

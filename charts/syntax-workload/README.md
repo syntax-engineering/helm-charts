@@ -103,6 +103,25 @@ workloads:
 Every backend routes all paths to the workload's Service on its `port`. Every entry can set
 `annotations`, which are copied onto the route, HTTPProxy, or Ingress.
 
+### Path rules
+
+`ngf` and `contour` entries can send extra path prefixes to another Service with `paths`. Each rule
+needs a `prefix`, a `service`, and a `port`. Everything else still goes to the workload's Service.
+
+```yaml
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [app.acme.example.com]
+        paths:
+          - { prefix: /assets, service: acme-assets-svc, port: 80 }
+          - { prefix: /packs, service: acme-assets-svc, port: 80 }
+```
+
+The longest matching prefix wins, so the order of the rules does not matter. Each rule gets the entry's
+`responseHeaders`, and on `contour` its `timeout`. `protocol` applies only to the workload's Service.
+The Service must be in the app namespace.
+
 ### TLS certificates
 
 Backends that terminate TLS with cert-manager (`ngf` and `contour`) issue certificates the same way. By
