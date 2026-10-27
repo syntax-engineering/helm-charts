@@ -171,6 +171,21 @@ tests:
     asserts:
       - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
 
+  - it: rejects a Contour-only field on an NGF entry
+    values: [schema/bad/ingress-ngf-with-contour-policy.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
+
+  - it: rejects a corsPolicy without allowMethods
+    values: [schema/bad/ingress-contour-cors-missing-methods.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'missing property .allowMethods.' }
+
+  - it: rejects an unknown load balancer strategy
+    values: [schema/bad/ingress-contour-bad-lb-strategy.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'strategy.: value must be one of' }
+
   - it: rejects an ingress entry name that is not a DNS label
     values: [schema/bad/ingress-bad-entry-name.yaml]
     asserts:

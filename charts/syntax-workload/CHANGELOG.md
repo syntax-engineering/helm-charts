@@ -17,6 +17,9 @@ Added (all optional):
     `Certificate`, and one `HTTPProxy` per hostname, with optional `protocol`, `timeout`, and
     `className`. `tls.clusterIssuer` uses a ClusterIssuer instead. `tls.perHost: true` renders a
     Certificate and Secret per hostname, with optional `tls.secretNames` to name each Secret.
+    `corsPolicy` sets CORS on each HTTPProxy's virtualhost (for example, gRPC-web origins per
+    environment), and `loadBalancerPolicy` sets how Contour picks an endpoint on the route. Both
+    use Contour's field names.
   - `ngf` and `contour` share `tls.acme.{email,server,waitInsteadOfSelfCheck}` for the generated
     Issuer.
   - `ngf` and `contour` take `paths: [{prefix, service, port}]`, which sends extra path prefixes

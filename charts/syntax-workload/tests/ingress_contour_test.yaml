@@ -256,3 +256,66 @@ tests:
       workloads.web.ingress.rpc: { backend: contour, name: acme-web-grpc, hostnames: [rpc.acme.example.com] }
     asserts:
       - failedTemplate: { errorMessage: 'contour entries "web/grpc" and "web/rpc" would both render objects named acme-web-grpc; change name on one of them' }
+
+  # Syntax Direct's gRPC-web proxy: CORS on the virtualhost, with origins set per environment.
+  - it: sets corsPolicy on every HTTPProxy virtualhost
+    set:
+      workloads.web.ingress.grpc:
+        hostnames: [grpc.acme.example.com, grpc.acme.example.org]
+        corsPolicy:
+          allowCredentials: true
+          allowPrivateNetwork: true
+          allowOrigin: ["https://acme.example.com"]
+          allowMethods: [GET, POST, OPTIONS]
+          allowHeaders: [authorization, x-grpc-web, grpc-timeout, content-type]
+          exposeHeaders: [Content-Length, Grpc-Status]
+          maxAge: 10m
+    asserts:
+      - equal:
+          path: spec.virtualhost.corsPolicy
+          value:
+            allowCredentials: true
+            allowPrivateNetwork: true
+            allowOrigin: ["https://acme.example.com"]
+            allowMethods: [GET, POST, OPTIONS]
+            allowHeaders: [authorization, x-grpc-web, grpc-timeout, content-type]
+            exposeHeaders: [Content-Length, Grpc-Status]
+            maxAge: 10m
+        documentIndex: 2
+      - equal: { path: spec.virtualhost.corsPolicy.allowOrigin, value: ["https://acme.example.com"] }
+        documentIndex: 3
+
+  - it: sets loadBalancerPolicy on the route
+    set:
+      workloads.web.ingress.grpc.loadBalancerPolicy: { strategy: WeightedLeastRequest }
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.routes[0].loadBalancerPolicy
+          value: { strategy: WeightedLeastRequest }
+
+  - it: passes request hash policies through for the RequestHash strategy
+    set:
+      workloads.web.ingress.grpc.loadBalancerPolicy:
+        strategy: RequestHash
+        requestHashPolicies:
+          - headerHashOptions: { headerName: X-Session }
+            terminal: true
+          - hashSourceIP: true
+    documentIndex: 2
+    asserts:
+      - equal:
+          path: spec.routes[0].loadBalancerPolicy
+          value:
+            strategy: RequestHash
+            requestHashPolicies:
+              - headerHashOptions: { headerName: X-Session }
+                terminal: true
+              - hashSourceIP: true
+
+  - it: leaves corsPolicy and loadBalancerPolicy out by default
+    documentIndex: 2
+    asserts:
+      - notExists: { path: spec.virtualhost.corsPolicy }
+      - notExists:
+          path: spec.routes[0].loadBalancerPolicy

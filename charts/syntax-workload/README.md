@@ -221,6 +221,26 @@ the same Contour serves. With `tls.clusterIssuer`, the Certificate carries the l
 | `timeout` | none | Response and idle timeout, for example `20m` |
 | `responseHeaders` | none | Map of headers set on every response |
 | `className` | none | `spec.ingressClassName` on the HTTPProxy, and the class of the ACME challenge Ingress (default `contour`) |
+| `corsPolicy` | none | Contour [`CORSPolicy`](https://projectcontour.io/docs/main/config/api/#projectcontour.io/v1.CORSPolicy) on each virtualhost: `allowOrigin` and `allowMethods` (required), `allowHeaders`, `exposeHeaders`, `allowCredentials`, `allowPrivateNetwork`, `maxAge` |
+| `loadBalancerPolicy` | none | Contour [`LoadBalancerPolicy`](https://projectcontour.io/docs/main/config/api/#projectcontour.io/v1.LoadBalancerPolicy) on the route: `strategy` (`Random`, `RoundRobin`, `WeightedLeastRequest`, `Cookie`, or `RequestHash`) and, for `RequestHash`, `requestHashPolicies` |
+
+A gRPC-web service that browsers call from other origins sets `corsPolicy` per environment, usually with
+only `allowOrigin` changing between environments:
+
+```yaml
+ingress:
+  grpc:
+    backend: contour
+    hostnames: [grpc.staging.acme.example.com]
+    protocol: h2c
+    corsPolicy:
+      allowCredentials: true
+      allowOrigin: ["https://staging.acme.example.com"]
+      allowMethods: [GET, POST, OPTIONS]
+      allowHeaders: [authorization, content-type, x-grpc-web, x-user-agent, grpc-timeout]
+      exposeHeaders: [grpc-status, grpc-message]
+    loadBalancerPolicy: { strategy: WeightedLeastRequest }
+```
 
 ### `tailscale`: Tailscale
 
