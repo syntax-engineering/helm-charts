@@ -128,6 +128,7 @@
     },
     "offOrInt": { "oneOf": [{ "const": false }, { "type": "integer", "minimum": 0 }] },
     "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "nonEmptyStrings": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
     "ingress": {
       "type": "object",
       "propertyNames": { "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
@@ -203,7 +204,49 @@
         },
         "className": { "type": "string", "minLength": 1 },
         "protocol": { "enum": ["h2", "h2c", "tls"] },
-        "timeout": { "type": "string", "pattern": "^(infinity|[0-9]+(ms|s|m|h))$" }
+        "timeout": { "type": "string", "pattern": "^(infinity|[0-9]+(ms|s|m|h))$" },
+        "corsPolicy": {
+          "type": "object",
+          "required": ["allowOrigin", "allowMethods"],
+          "additionalProperties": false,
+          "properties": {
+            "allowCredentials": { "type": "boolean" },
+            "allowPrivateNetwork": { "type": "boolean" },
+            "allowOrigin": { "$ref": "#/$defs/nonEmptyStrings" },
+            "allowMethods": { "$ref": "#/$defs/nonEmptyStrings" },
+            "allowHeaders": { "$ref": "#/$defs/nonEmptyStrings" },
+            "exposeHeaders": { "$ref": "#/$defs/nonEmptyStrings" },
+            "maxAge": { "type": "string", "pattern": "^(-1|[0-9]+(ms|s|m|h))$" }
+          }
+        },
+        "loadBalancerPolicy": {
+          "type": "object",
+          "required": ["strategy"],
+          "additionalProperties": false,
+          "properties": {
+            "strategy": { "enum": ["Random", "RoundRobin", "WeightedLeastRequest", "Cookie", "RequestHash"] },
+            "requestHashPolicies": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "headerHashOptions": {
+                    "type": "object", "required": ["headerName"], "additionalProperties": false,
+                    "properties": { "headerName": { "type": "string", "minLength": 1 } }
+                  },
+                  "queryParameterHashOptions": {
+                    "type": "object", "required": ["parameterName"], "additionalProperties": false,
+                    "properties": { "parameterName": { "type": "string", "minLength": 1 } }
+                  },
+                  "hashSourceIP": { "type": "boolean" },
+                  "terminal": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        }
       },
       "allOf": [
         {
@@ -213,7 +256,8 @@
             "not": {
               "anyOf": [
                 { "required": ["hostname"] }, { "required": ["className"] }, { "required": ["protocol"] }, { "required": ["timeout"] },
-                { "required": ["tls"], "properties": { "tls": { "anyOf": [{ "required": ["perHost"] }, { "required": ["secretNames"] }] } } }
+                { "required": ["tls"], "properties": { "tls": { "anyOf": [{ "required": ["perHost"] }, { "required": ["secretNames"] }] } } },
+                { "required": ["corsPolicy"] }, { "required": ["loadBalancerPolicy"] }
               ]
             }
           }
@@ -233,7 +277,7 @@
               "anyOf": [
                 { "required": ["hostnames"] }, { "required": ["tls"] }, { "required": ["responseHeaders"] }, { "required": ["paths"] }, { "required": ["gateway"] },
                 { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }, { "required": ["className"] },
-                { "required": ["protocol"] }, { "required": ["timeout"] }
+                { "required": ["protocol"] }, { "required": ["timeout"] }, { "required": ["corsPolicy"] }, { "required": ["loadBalancerPolicy"] }
               ]
             }
           }

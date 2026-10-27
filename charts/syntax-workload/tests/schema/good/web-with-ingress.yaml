@@ -17,6 +17,12 @@ workloads:
         name: acme-gruf
         hostnames: [grpc.acme.example.com]
         paths: [{ prefix: /packs, service: acme-assets-svc, port: 80 }]
+        corsPolicy:
+          allowCredentials: true
+          allowOrigin: ["https://acme.example.com"]
+          allowMethods: [GET, POST, OPTIONS]
+          allowHeaders: [content-type, x-grpc-web]
+        loadBalancerPolicy: { strategy: WeightedLeastRequest }
       tailnet:
         backend: tailscale
         hostname: acme-sprint-rails
