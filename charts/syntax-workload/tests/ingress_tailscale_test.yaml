@@ -32,3 +32,18 @@ tests:
     set: { workloads.web.ingress.tailnet.enabled: false }
     asserts:
       - hasDocuments: { count: 0 }
+
+  # Renaming the Ingress makes the operator create a new tailnet device; name keeps the old one.
+  - it: names the Ingress after name when set
+    set:
+      workloads.web.ingress.tailnet.enabled: false
+      workloads.web.ingress.private: { backend: tailscale, name: acme-web-tailnet, hostname: acme-sprint-rails }
+    asserts:
+      - hasDocuments: { count: 1 }
+      - equal: { path: metadata.name, value: acme-web-tailnet }
+
+  - it: fails when two Tailscale entries would render the same Ingress name
+    set:
+      workloads.web.ingress.other: { backend: tailscale, name: acme-web-tailnet, hostname: acme-other }
+    asserts:
+      - failedTemplate: { errorMessage: 'tailscale entries "web/other" and "web/tailnet" would both render objects named acme-web-tailnet; change name on one of them' }

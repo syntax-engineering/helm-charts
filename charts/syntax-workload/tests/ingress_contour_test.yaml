@@ -159,3 +159,26 @@ tests:
     set: { workloads.web.ingress.grpc.enabled: false }
     asserts:
       - hasDocuments: { count: 0 }
+
+  # Renaming the key alone would replace the Certificate and reissue it; name keeps every object.
+  - it: names the Issuer, Certificate, Secret, and HTTPProxy after name when set
+    set:
+      workloads.web.ingress.grpc.enabled: false
+      workloads.web.ingress.rpc: { backend: contour, name: acme-web-grpc, hostnames: [grpc.acme.example.com] }
+    asserts:
+      - equal: { path: metadata.name, value: acme-web-grpc-acme }
+        documentIndex: 0
+      - equal: { path: metadata.name, value: acme-web-grpc }
+        documentIndex: 1
+      - equal: { path: spec.secretName, value: acme-web-grpc-tls }
+        documentIndex: 1
+      - equal: { path: spec.issuerRef.name, value: acme-web-grpc-acme }
+        documentIndex: 1
+      - equal: { path: metadata.name, value: acme-web-grpc }
+        documentIndex: 2
+
+  - it: fails when two Contour entries would render the same names
+    set:
+      workloads.web.ingress.rpc: { backend: contour, name: acme-web-grpc, hostnames: [rpc.acme.example.com] }
+    asserts:
+      - failedTemplate: { errorMessage: 'contour entries "web/grpc" and "web/rpc" would both render objects named acme-web-grpc; change name on one of them' }

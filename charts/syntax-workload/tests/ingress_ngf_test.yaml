@@ -236,6 +236,24 @@ tests:
     asserts:
       - hasDocuments: { count: 8 }
 
+  # The Gateway, Issuer, and Secret are named after the app, so name only changes the routes.
+  - it: names the routes after name when set
+    set:
+      workloads.web.ingress.public.name: acme-web-site
+    asserts:
+      - equal: { path: metadata.name, value: acme-nginx-gateway }
+        documentIndex: 1
+      - equal: { path: metadata.name, value: acme-web-site }
+        documentIndex: 2
+      - equal: { path: metadata.name, value: acme-web-site-redirect }
+        documentIndex: 3
+
+  - it: fails when two entries would render the same route names
+    set:
+      workloads.web.ingress.internal: { backend: ngf, name: acme-web-public, hostnames: [internal.acme.example.com], gateway: { create: false } }
+    asserts:
+      - failedTemplate: { errorPattern: 'ngf entries "web/internal" and "web/public" would both render objects named acme-web-public; change name on one of them' }
+
   - it: renders nothing for a disabled entry
     set: { workloads.web.ingress.public.enabled: false }
     asserts:

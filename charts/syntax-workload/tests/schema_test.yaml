@@ -171,6 +171,11 @@ tests:
     asserts:
       - failedTemplate: { errorPattern: '.Public. does not match pattern' }
 
+  - it: rejects an ingress name that is not a DNS label
+    values: [schema/bad/ingress-bad-name.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '.Acme_Web. does not match pattern' }
+
   - it: rejects tls.clusterIssuer together with tls.acme
     values: [schema/bad/ingress-issuer-and-acme.yaml]
     asserts:

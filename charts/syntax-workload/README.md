@@ -78,8 +78,9 @@ Web or Worker selector. CronJobs may share a `role` with each other.
 
 Web workloads can set `ingress`, a map of entries keyed by name. Each entry picks a `backend`, so one
 workload can be public through NGINX Gateway Fabric and private through Tailscale at the same time.
-Objects are named `<workload fullname>-<entry>`, for example `acme-web-public`. Set `enabled: false`
-on an entry to drop it.
+Objects are named `<workload fullname>-<entry>`, for example `acme-web-public`. Set `name` on an entry
+to use a different name, for example to keep the names an app already uses. Set `enabled: false` on an
+entry to drop it.
 
 ```yaml
 workloads:
@@ -121,6 +122,22 @@ needs a `prefix`, a `service`, and a `port`. Everything else still goes to the w
 The longest matching prefix wins, so the order of the rules does not matter. Each rule gets the entry's
 `responseHeaders`, and on `contour` its `timeout`. `protocol` applies only to the workload's Service.
 The Service must be in the app namespace.
+
+### Renaming an entry
+
+The entry key is part of the object names, so renaming an entry renames its objects. Kubernetes treats
+a renamed object as a new one: it deletes the old object and creates the new one. What that means
+depends on the backend:
+
+| Backend | Named after the entry | Effect of renaming the entry |
+|---|---|---|
+| `ngf` | `HTTPRoute`s | The routes are replaced. The Gateway, Issuer, and Secret are named after the app, so the load balancer and certificate stay |
+| `contour` | Issuer, `Certificate`, Secret, `HTTPProxy` | cert-manager issues a new certificate. This uses Let's Encrypt quota, and HTTPS may fail briefly while it issues |
+| `tailscale` | `Ingress` | The operator creates a new tailnet device. While the old device still exists, the new one may get the name `<hostname>-1` |
+
+To rename an entry without these effects, set `name` to the old object name, for example
+`name: acme-web-grpc` after renaming `grpc` to `rpc`. The objects then keep their names. The render
+fails if two entries with the same backend would use the same name.
 
 ### TLS certificates
 
@@ -191,7 +208,7 @@ the same Contour serves. With `tls.clusterIssuer`, the Certificate carries the l
 | Field | Default | Meaning |
 |---|---|---|
 | `hostnames` | required | Public hostnames |
-| `tls.secretName` | `<name>-tls` | Certificate Secret, in the app namespace |
+| `tls.secretName` | `<workload fullname>-<entry>-tls`, or `<name>-tls` when `name` is set | Certificate Secret, in the app namespace |
 | `protocol` | none | Upstream protocol: `h2c` for plaintext gRPC, or `h2` or `tls` |
 | `timeout` | none | Response and idle timeout, for example `20m` |
 | `responseHeaders` | none | Map of headers set on every response |

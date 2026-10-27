@@ -1,3 +1,4 @@
+{{- include "sw.assertUniqueIngressNames" (dict "root" . "backend" "ngf") }}
 {{- include "sw.assertUniqueGateways" . }}
 {{- range $name, $w := .Values.workloads }}
 {{- if and (eq $w.kind "Web") (ne $w.enabled false) }}
