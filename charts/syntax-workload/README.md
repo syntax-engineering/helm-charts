@@ -103,6 +103,25 @@ workloads:
 Every backend routes all paths to the workload's Service on its `port`. Every entry can set
 `annotations`, which are copied onto the route, HTTPProxy, or Ingress.
 
+### TLS certificates
+
+Backends that terminate TLS with cert-manager (`ngf` and `contour`) issue certificates the same way. By
+default each entry generates its own ACME `Issuer`, whose HTTP-01 solver the backend itself serves. This
+works without any issuer in the app repo or on the cluster. Set `tls.clusterIssuer` to use a
+ClusterIssuer instead; that issuer then needs a solver the backend can serve.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `tls.secretName` | per backend | Certificate Secret |
+| `tls.clusterIssuer` | none | Use this ClusterIssuer instead of generating an Issuer |
+| `tls.acme.email` | `devops@syntaxdata.com` | ACME account email for the generated Issuer |
+| `tls.acme.server` | Let's Encrypt production | ACME directory URL for the generated Issuer |
+| `tls.acme.waitInsteadOfSelfCheck` | none | Skip cert-manager's self-check and wait this long, for example `30s`. Needs cert-manager 1.21 or later. Use it where the self-check cannot reach the load balancer, such as behind PROXY protocol |
+
+`tls.clusterIssuer` cannot be combined with `tls.acme`. The generated Issuer is named `<owner>-acme`
+and keeps its ACME account key in `<owner>-acme-account`, where the owner is the Gateway for `ngf` and
+the entry's objects for `contour`.
+
 ### `ngf`: NGINX Gateway Fabric
 
 Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`.
@@ -111,9 +130,6 @@ Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTP
 |---|---|---|
 | `hostnames` | required | Public hostnames; a leading `*.` is allowed |
 | `tls.secretName` | `<app>-tls` | Certificate Secret, in the Gateway's namespace |
-| `tls.acme.email` | `devops@syntaxdata.com` | ACME account email for the generated Issuer |
-| `tls.acme.server` | Let's Encrypt production | ACME directory URL for the generated Issuer |
-| `tls.clusterIssuer` | none | Use this ClusterIssuer instead of generating an Issuer |
 | `redirectHttp` | `true` | `false` drops the redirect route; the port 80 listeners stay for ACME HTTP-01 |
 | `redirectStatusCode` | `301` | `301` or `308` |
 | `responseHeaders` | none | Map of headers set on every response |
@@ -128,9 +144,11 @@ each Gateway, so keeping the name keeps the public IP when an app moves its Gate
 render fails if two entries would create the same Gateway or write the same Secret; set `gateway.name`
 or `tls.secretName` on one of them.
 
-cert-manager issues the certificate from the Gateway's `cert-manager.io/issuer` annotation. The
-generated Issuer lives next to the Gateway and its HTTP-01 solver attaches the challenge route to that
-Gateway. With `tls.clusterIssuer`, that ClusterIssuer's solver must attach to the Gateway itself.
+cert-manager issues the certificate from the Gateway's `cert-manager.io/issuer` annotation (or
+`cert-manager.io/cluster-issuer` with `tls.clusterIssuer`). The generated Issuer lives next to the
+Gateway, and its HTTP-01 solver attaches the challenge route to that Gateway through `parentRefs`. A
+ClusterIssuer's `gatewayHTTPRoute` solver needs the same `parentRefs`, or the challenge route attaches
+to nothing.
 
 The Gateway gets an HTTP listener (`http-<host>`) and an HTTPS listener (`https-<host>`) for each
 hostname. In the listener name, `.` becomes `-` and `*` becomes `wildcard`. A shared Gateway used with
@@ -143,19 +161,22 @@ change the Gateway's route selector, so the Gateway would reject the routes.
 
 ### `contour`: Contour
 
-Generates a cert-manager `Certificate` for all hostnames, plus one `HTTPProxy` per hostname. With more
-than one hostname, each HTTPProxy name ends in `-<host>`. The Certificate carries the label
-`cert-manager.io/solver: contour`, so an issuer can pick its Contour HTTP-01 solver.
+Generates an ACME `Issuer`, a cert-manager `Certificate` for all hostnames, and one `HTTPProxy` per
+hostname. With more than one hostname, each HTTPProxy name ends in `-<host>`.
+
+HTTPProxy has no cert-manager shim, so the chart renders the Certificate. The generated Issuer, in the
+app namespace, solves HTTP-01 through an Ingress with the entry's `className` (default `contour`), which
+the same Contour serves. With `tls.clusterIssuer`, the Certificate carries the label
+`cert-manager.io/solver: contour`, so the ClusterIssuer can pick a Contour solver by label.
 
 | Field | Default | Meaning |
 |---|---|---|
 | `hostnames` | required | Public hostnames |
-| `tls.clusterIssuer` | `letsencrypt-prod` | cert-manager ClusterIssuer |
 | `tls.secretName` | `<name>-tls` | Certificate Secret, in the app namespace |
 | `protocol` | none | Upstream protocol: `h2c` for plaintext gRPC, or `h2` or `tls` |
 | `timeout` | none | Response and idle timeout, for example `20m` |
 | `responseHeaders` | none | Map of headers set on every response |
-| `className` | none | `spec.ingressClassName`, when Contour runs with an ingress class |
+| `className` | none | `spec.ingressClassName` on the HTTPProxy, and the class of the ACME challenge Ingress (default `contour`) |
 
 ### `tailscale`: Tailscale
 

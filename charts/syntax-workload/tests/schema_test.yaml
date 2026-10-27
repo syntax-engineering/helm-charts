@@ -165,7 +165,7 @@ tests:
     asserts:
       - failedTemplate: { errorPattern: '/ingress/public/tls.: .not. failed' }
 
-  - it: rejects tls.acme on a Contour entry
-    values: [schema/bad/ingress-contour-with-acme.yaml]
+  - it: rejects a waitInsteadOfSelfCheck that is not a duration
+    values: [schema/bad/ingress-bad-wait.yaml]
     asserts:
-      - failedTemplate: { errorPattern: '/ingress/grpc/tls.: .not. failed' }
+      - failedTemplate: { errorPattern: 'waitInsteadOfSelfCheck.: .30 seconds. does not match pattern' }

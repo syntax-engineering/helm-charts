@@ -11,4 +11,4 @@ workloads:
       grpc:
         backend: contour
         hostnames: [grpc.acme.example.com]
-        tls: { acme: { email: ops@example.com } }
+        tls: { acme: { waitInsteadOfSelfCheck: 30 seconds } }

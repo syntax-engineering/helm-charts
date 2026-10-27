@@ -239,8 +239,26 @@ same Gateway, or would write the same TLS Secret in one namespace.
 {{- end -}}
 {{- end }}
 
-{{- define "sw.ingressIssuer" -}}
-{{- dig "tls" "clusterIssuer" "letsencrypt-prod" .in -}}
+{{/*
+The ACME Issuer every TLS backend renders unless tls.clusterIssuer is set.
+dict "c" <ingress context> "name" <Issuer name> "namespace" <ns> "solver" <backend's solver map>.
+*/}}
+{{- define "sw.acmeIssuer" -}}
+{{- $acme := dig "tls" "acme" (dict) .c.in -}}
+{{- $solver := .solver -}}
+{{- with $acme.waitInsteadOfSelfCheck }}{{ $solver = merge (dict "waitInsteadOfSelfCheck" .) $solver }}{{ end -}}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ .name }}
+  namespace: {{ .namespace }}
+  labels: {{- include "sw.selector" .c | nindent 4 }}
+spec:
+  acme:
+    server: {{ $acme.server | default "https://acme-v02.api.letsencrypt.org/directory" }}
+    email: {{ $acme.email | default "devops@syntaxdata.com" }}
+    privateKeySecretRef: { name: {{ .name }}-account }
+    solvers: {{- toYaml (list $solver) | nindent 6 }}
 {{- end }}
 
 {{/* A hostname as a DNS label: "*.a.example.com" -> "wildcard-a-example-com". */}}
