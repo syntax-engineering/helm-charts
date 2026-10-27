@@ -155,6 +155,80 @@ tests:
       - equal: { path: spec.virtualhost.tls.secretName, value: acme-web-grpc-tls }
         documentIndex: 3
 
+  - it: renders a certificate and secret per hostname with tls.perHost
+    set:
+      workloads.web.ingress.grpc:
+        hostnames: [grpc.acme.example.com, grpc.acme.example.org]
+        tls: { perHost: true }
+    asserts:
+      - hasDocuments: { count: 5 }
+      - isKind: { of: Certificate }
+        documentIndex: 1
+      - equal:
+          path: metadata
+          value:
+            name: acme-web-grpc-grpc-acme-example-com
+            namespace: acme-env
+            labels: { app: acme, role: web, cert-manager.io/solver: contour }
+        documentIndex: 1
+      - equal:
+          path: spec
+          value:
+            secretName: acme-web-grpc-grpc-acme-example-com-tls
+            issuerRef: { kind: Issuer, name: acme-web-grpc-acme }
+            dnsNames: [grpc.acme.example.com]
+        documentIndex: 1
+      - equal: { path: spec.virtualhost.tls.secretName, value: acme-web-grpc-grpc-acme-example-com-tls }
+        documentIndex: 2
+      - isKind: { of: Certificate }
+        documentIndex: 3
+      - equal: { path: spec.secretName, value: acme-web-grpc-grpc-acme-example-org-tls }
+        documentIndex: 3
+      - equal: { path: spec.dnsNames, value: [grpc.acme.example.org] }
+        documentIndex: 3
+      - equal: { path: spec.virtualhost.tls.secretName, value: acme-web-grpc-grpc-acme-example-org-tls }
+        documentIndex: 4
+
+  # Lets an app keep the Secrets it already has when it moves onto the chart.
+  - it: uses tls.secretNames for the hostnames it lists
+    set:
+      workloads.web.ingress.grpc:
+        hostnames: [grpc.acme.example.com, grpc.acme.example.org]
+        tls: { perHost: true, secretNames: { grpc.acme.example.org: acme-org-tls } }
+    asserts:
+      - equal: { path: spec.secretName, value: acme-web-grpc-grpc-acme-example-com-tls }
+        documentIndex: 1
+      - equal: { path: spec.secretName, value: acme-org-tls }
+        documentIndex: 3
+      - equal: { path: spec.virtualhost.tls.secretName, value: acme-org-tls }
+        documentIndex: 4
+
+  - it: keeps the entry's names with tls.perHost and one hostname
+    set:
+      workloads.web.ingress.grpc.tls: { perHost: true }
+    asserts:
+      - hasDocuments: { count: 3 }
+      - equal: { path: metadata.name, value: acme-web-grpc }
+        documentIndex: 1
+      - equal: { path: spec.secretName, value: acme-web-grpc-tls }
+        documentIndex: 1
+      - equal: { path: metadata.name, value: acme-web-grpc }
+        documentIndex: 2
+
+  - it: fails when tls.secretNames lists a hostname the entry does not serve
+    set:
+      workloads.web.ingress.grpc.tls: { perHost: true, secretNames: { grpc.acme.example.org: acme-org-tls } }
+    asserts:
+      - failedTemplate: { errorPattern: 'tls.secretNames has grpc.acme.example.org, which is not in hostnames' }
+
+  - it: fails when two hostnames would write the same secret
+    set:
+      workloads.web.ingress.grpc:
+        hostnames: [grpc.acme.example.com, grpc.acme.example.org]
+        tls: { perHost: true, secretNames: { grpc.acme.example.com: acme-tls, grpc.acme.example.org: acme-tls } }
+    asserts:
+      - failedTemplate: { errorPattern: 'hostnames grpc.acme.example.com and grpc.acme.example.org would both write TLS secret acme-tls' }
+
   - it: renders nothing for a disabled entry
     set: { workloads.web.ingress.grpc.enabled: false }
     asserts:

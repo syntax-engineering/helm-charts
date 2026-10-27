@@ -130,6 +130,11 @@ tests:
     asserts:
       - notFailedTemplate: {}
 
+  - it: accepts a Contour entry with a certificate per hostname
+    values: [schema/good/contour-per-host-tls.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
   - it: rejects ingress on a non-Web workload
     values: [schema/bad/ingress-on-worker.yaml]
     asserts:
@@ -185,3 +190,18 @@ tests:
     values: [schema/bad/ingress-bad-wait.yaml]
     asserts:
       - failedTemplate: { errorPattern: 'waitInsteadOfSelfCheck.: .30 seconds. does not match pattern' }
+
+  - it: rejects tls.secretNames without tls.perHost
+    values: [schema/bad/ingress-secret-names-without-per-host.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'missing property .perHost.' }
+
+  - it: rejects tls.secretName together with tls.perHost
+    values: [schema/bad/ingress-per-host-with-secret-name.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public/tls.: .not. failed' }
+
+  - it: rejects tls.perHost on an NGF entry
+    values: [schema/bad/ingress-ngf-per-host.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
