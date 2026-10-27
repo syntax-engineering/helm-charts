@@ -3,6 +3,13 @@
 {{- range $key, $in := $w.ingress }}
 {{- if and (eq $in.backend "contour") (ne $in.enabled false) }}
 {{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in }}
+{{- $issuerRef := dict "kind" "ClusterIssuer" "name" (dig "tls" "clusterIssuer" "" $in) }}
+{{- if not $issuerRef.name }}
+{{- $issuerRef = dict "kind" "Issuer" "name" (printf "%s-acme" (include "sw.ingressName" $c)) }}
+{{- /* The solver's challenge Ingress uses the entry's class, so the same Contour serves it. */}}
+---
+{{ include "sw.acmeIssuer" (dict "c" $c "name" $issuerRef.name "namespace" $.Values.namespace "solver" (dict "http01" (dict "ingress" (dict "ingressClassName" ($in.className | default "contour"))))) }}
+{{- end }}
 {{- /* HTTPProxy has no cert-manager shim, so the chart asks for the certificate itself. */}}
 ---
 apiVersion: cert-manager.io/v1
@@ -14,7 +21,7 @@ metadata:
     cert-manager.io/solver: contour
 spec:
   secretName: {{ include "sw.ingressTlsSecret" $c }}
-  issuerRef: { kind: ClusterIssuer, name: {{ include "sw.ingressIssuer" $c }} }
+  issuerRef: { kind: {{ $issuerRef.kind }}, name: {{ $issuerRef.name }} }
   dnsNames: {{- toYaml $in.hostnames | nindent 4 }}
 {{- /* An HTTPProxy serves one fqdn, so each hostname gets its own. */}}
 {{- range $in.hostnames }}

@@ -159,7 +159,8 @@
               "additionalProperties": false,
               "properties": {
                 "email": { "type": "string", "minLength": 1 },
-                "server": { "type": "string", "pattern": "^https://" }
+                "server": { "type": "string", "pattern": "^https://" },
+                "waitInsteadOfSelfCheck": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" }
               }
             }
           },
@@ -195,7 +196,6 @@
           "if": { "properties": { "backend": { "const": "contour" } }, "required": ["backend"] },
           "then": {
             "required": ["hostnames"],
-            "properties": { "tls": { "not": { "required": ["acme"] } } },
             "not": { "anyOf": [{ "required": ["hostname"] }, { "required": ["gateway"] }, { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }] }
           }
         },

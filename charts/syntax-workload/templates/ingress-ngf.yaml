@@ -11,24 +11,10 @@
 {{- $issuer := dict "cert-manager.io/cluster-issuer" (dig "tls" "clusterIssuer" "" $in) }}
 {{- if not (dig "tls" "clusterIssuer" "" $in) }}
 {{- $issuer = dict "cert-manager.io/issuer" (printf "%s-acme" $gwName) }}
-{{- /* Its HTTP-01 solver attaches the challenge route to this Gateway; without parentRefs the route attaches nowhere. */}}
+{{- /* The solver attaches the challenge route to this Gateway; without parentRefs it attaches nowhere. */}}
+{{- $parent := dict "group" "gateway.networking.k8s.io" "kind" "Gateway" "name" $gwName "namespace" $gwNamespace }}
 ---
-apiVersion: cert-manager.io/v1
-kind: Issuer
-metadata:
-  name: {{ $gwName }}-acme
-  namespace: {{ $gwNamespace }}
-  labels: {{- include "sw.selector" $c | nindent 4 }}
-spec:
-  acme:
-    server: {{ dig "tls" "acme" "server" "https://acme-v02.api.letsencrypt.org/directory" $in }}
-    email: {{ dig "tls" "acme" "email" "devops@syntaxdata.com" $in }}
-    privateKeySecretRef: { name: {{ $gwName }}-acme-account }
-    solvers:
-      - http01:
-          gatewayHTTPRoute:
-            parentRefs:
-              - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ $gwName }}, namespace: {{ $gwNamespace }} }
+{{ include "sw.acmeIssuer" (dict "c" $c "name" (printf "%s-acme" $gwName) "namespace" $gwNamespace "solver" (dict "http01" (dict "gatewayHTTPRoute" (dict "parentRefs" (list $parent))))) }}
 {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1

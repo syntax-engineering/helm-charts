@@ -13,8 +13,11 @@ Added (all optional):
     `<app>-tls` by default, matching existing apps. An ACME `Issuer` next to the Gateway issues the
     certificate, with its HTTP-01 solver attached to that Gateway; `tls.clusterIssuer` uses a
     ClusterIssuer instead. `gateway.create: false` attaches the routes to an existing Gateway.
-  - `contour`: a cert-manager `Certificate` and one `HTTPProxy` per hostname, with optional
-    `protocol`, `timeout`, and `className`.
+  - `contour`: an ACME `Issuer` that solves HTTP-01 through a Contour Ingress, a cert-manager
+    `Certificate`, and one `HTTPProxy` per hostname, with optional `protocol`, `timeout`, and
+    `className`. `tls.clusterIssuer` uses a ClusterIssuer instead.
+  - `ngf` and `contour` share `tls.acme.{email,server,waitInsteadOfSelfCheck}` for the generated
+    Issuer.
   - `tailscale`: an `Ingress` with `ingressClassName: tailscale` on the workload's Service port.
 
 ## [0.3.0] - 2026-10-07

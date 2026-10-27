@@ -131,7 +131,7 @@ tests:
         annotations: { team: core }
         tls:
           secretName: acme-wildcard-tls
-          acme: { email: ops@example.com, server: https://acme-staging-v02.api.letsencrypt.org/directory }
+          acme: { email: ops@example.com, server: https://acme-staging-v02.api.letsencrypt.org/directory, waitInsteadOfSelfCheck: 30s }
         gateway:
           name: edge
           namespace: gateways
@@ -145,6 +145,8 @@ tests:
       - equal: { path: spec.acme.email, value: ops@example.com }
         documentIndex: 0
       - equal: { path: spec.acme.server, value: https://acme-staging-v02.api.letsencrypt.org/directory }
+        documentIndex: 0
+      - equal: { path: 'spec.acme.solvers[0].waitInsteadOfSelfCheck', value: 30s }
         documentIndex: 0
       - equal:
           path: metadata.annotations
