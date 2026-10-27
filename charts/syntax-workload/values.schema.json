@@ -295,9 +295,10 @@
           "if": { "properties": { "backend": { "const": "ngf" } }, "required": ["backend"] },
           "then": {
             "required": ["hostnames"],
+            "properties": { "timeout": { "pattern": "^[0-9]{1,4}(ms|s|m|h)$" } },
             "not": {
               "anyOf": [
-                { "required": ["hostname"] }, { "required": ["className"] }, { "required": ["protocol"] }, { "required": ["timeout"] },
+                { "required": ["hostname"] }, { "required": ["className"] }, { "required": ["protocol"] },
                 { "required": ["tls"], "properties": { "tls": { "anyOf": [{ "required": ["perHost"] }, { "required": ["secretNames"] }] } } },
                 { "required": ["corsPolicy"] }, { "required": ["loadBalancerPolicy"] }
               ]

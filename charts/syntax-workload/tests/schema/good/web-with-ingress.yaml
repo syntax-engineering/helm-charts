@@ -18,6 +18,7 @@ workloads:
         clientSettings:
           body: { bufferSize: 16k, maxSize: 1g, timeout: 300s }
           keepAlive: { requests: 1000, time: 1h, minTimeout: 5s, timeout: { server: 75s, header: 60s } }
+        timeout: 20m
       grpc:
         backend: contour
         name: acme-gruf
