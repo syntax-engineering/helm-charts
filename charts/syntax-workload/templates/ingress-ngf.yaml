@@ -72,14 +72,20 @@ spec:
     {{- range $rule := prepend ($in.paths | default list) (dict "prefix" "/" "service" (include "sw.ingressService" $c) "port" $w.port) }}
     - matches:
         - path: { type: PathPrefix, value: {{ $rule.prefix }} }
-      {{- with $in.responseHeaders }}
+      {{- if or $in.responseHeaders $in.snippets }}
       filters:
+        {{- with $in.responseHeaders }}
         - type: ResponseHeaderModifier
           responseHeaderModifier:
             set:
               {{- range $header, $value := . }}
               - { name: {{ $header }}, value: {{ $value | quote }} }
               {{- end }}
+        {{- end }}
+        {{- if $in.snippets }}
+        - type: ExtensionRef
+          extensionRef: { group: gateway.nginx.org, kind: SnippetsFilter, name: {{ include "sw.ingressName" $c }} }
+        {{- end }}
       {{- end }}
       backendRefs:
         - { group: '', kind: Service, name: {{ $rule.service }}, port: {{ $rule.port }} }
@@ -107,6 +113,33 @@ spec:
       filters:
         - type: RequestRedirect
           requestRedirect: { scheme: https, statusCode: {{ $in.redirectStatusCode | default 301 }} }
+{{- end }}
+{{- with $in.snippets }}
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: {{ include "sw.ingressName" $c }}
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+spec:
+  snippets:
+    {{- range $context, $value := . }}
+    - context: {{ $context }}
+      value: {{ $value | quote }}
+    {{- end }}
+{{- end }}
+{{- with $in.clientSettings }}
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: {{ include "sw.ingressName" $c }}
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+spec:
+  targetRef: { group: gateway.networking.k8s.io, kind: HTTPRoute, name: {{ include "sw.ingressName" $c }} }
+  {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end }}
 {{- end }}

@@ -246,6 +246,48 @@
               }
             }
           }
+        },
+        "snippets": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "main": { "type": "string", "minLength": 1 },
+            "http": { "type": "string", "minLength": 1 },
+            "http.server": { "type": "string", "minLength": 1 },
+            "http.server.location": { "type": "string", "minLength": 1 }
+          }
+        },
+        "clientSettings": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "body": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "bufferSize": { "$ref": "#/$defs/ngfSize" },
+                "maxSize": { "$ref": "#/$defs/ngfSize" },
+                "timeout": { "$ref": "#/$defs/ngfDuration" }
+              }
+            },
+            "keepAlive": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "requests": { "type": "integer", "minimum": 0 },
+                "time": { "$ref": "#/$defs/ngfDuration" },
+                "minTimeout": { "$ref": "#/$defs/ngfDuration" },
+                "timeout": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": { "server": { "$ref": "#/$defs/ngfDuration" }, "header": { "$ref": "#/$defs/ngfDuration" } },
+                  "dependentRequired": { "header": ["server"] }
+                }
+              }
+            }
+          }
         }
       },
       "allOf": [
@@ -266,7 +308,10 @@
           "if": { "properties": { "backend": { "const": "contour" } }, "required": ["backend"] },
           "then": {
             "required": ["hostnames"],
-            "not": { "anyOf": [{ "required": ["hostname"] }, { "required": ["gateway"] }, { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }] }
+            "not": { "anyOf": [
+              { "required": ["hostname"] }, { "required": ["gateway"] }, { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] },
+              { "required": ["snippets"] }, { "required": ["clientSettings"] }
+            ] }
           }
         },
         {
@@ -277,13 +322,16 @@
               "anyOf": [
                 { "required": ["hostnames"] }, { "required": ["tls"] }, { "required": ["responseHeaders"] }, { "required": ["paths"] }, { "required": ["gateway"] },
                 { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }, { "required": ["className"] },
-                { "required": ["protocol"] }, { "required": ["timeout"] }, { "required": ["corsPolicy"] }, { "required": ["loadBalancerPolicy"] }
+                { "required": ["protocol"] }, { "required": ["timeout"] }, { "required": ["corsPolicy"] }, { "required": ["loadBalancerPolicy"] },
+                { "required": ["snippets"] }, { "required": ["clientSettings"] }
               ]
             }
           }
         }
       ]
     },
+    "ngfSize": { "type": "string", "pattern": "^[0-9]{1,4}(k|m|g)?$" },
+    "ngfDuration": { "type": "string", "pattern": "^[0-9]{1,4}(ms|s|m|h)?$" },
     "workload": {
       "type": "object",
       "required": ["kind"],

@@ -1,0 +1,11 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: 2
+    ingress:
+      public: { backend: contour, hostnames: [grpc.acme.example.com], snippets: { http.server.location: "proxy_read_timeout 3600s;" } }

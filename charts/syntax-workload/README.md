@@ -160,7 +160,8 @@ the entry's objects for `contour`.
 
 ### `ngf`: NGINX Gateway Fabric
 
-Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`.
+Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`,
+plus a `SnippetsFilter` and a `ClientSettingsPolicy` when `snippets` or `clientSettings` is set.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -169,6 +170,8 @@ Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTP
 | `redirectHttp` | `true` | `false` drops the redirect route; the port 80 listeners stay for ACME HTTP-01 |
 | `redirectStatusCode` | `301` | `301` or `308` |
 | `responseHeaders` | none | Map of headers set on every response |
+| `snippets` | none | Map of NGINX context to raw NGINX config, for the HTTPS route |
+| `clientSettings` | none | `ClientSettingsPolicy` spec for the HTTPS route: `body` and `keepAlive` |
 | `gateway.create` | `true` | `false` attaches the routes to an existing Gateway, and renders no Gateway or Issuer |
 | `gateway.name` | `<app>-nginx-gateway` | Gateway name |
 | `gateway.namespace` | `nginx-gateway` | Gateway namespace |
@@ -194,6 +197,37 @@ The HTTPS listeners accept routes only from `namespace`. The HTTP listeners also
 Gateway's namespace, where cert-manager creates the challenge route. Set `namespace` to the namespace
 the app really runs in. A Kustomize patch that rewrites `metadata.namespace` after rendering does not
 change the Gateway's route selector, so the Gateway would reject the routes.
+
+#### NGINX policies
+
+`snippets` and `clientSettings` tune NGINX for the HTTPS route. They work the same with or without
+`gateway.create`, because both attach to the route, not the Gateway.
+
+```yaml
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [mcp.acme.example.com]
+        snippets:
+          http.server: ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+          http.server.location: |
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+        clientSettings:
+          body: { maxSize: 1g, timeout: 300s }
+```
+
+`snippets` renders a `SnippetsFilter` named like the route and adds it to the route as an `ExtensionRef`
+filter. The keys are the NGINX contexts NGF allows: `main`, `http`, `http.server`, and
+`http.server.location`. NGF must run with snippets enabled
+(`nginxGateway.snippets.enable` in its Helm chart). Otherwise it cannot resolve the filter, and the
+route rule that uses it stops serving traffic.
+`main` and `http` snippets change NGINX for every app on the Gateway, so prefer `http.server` and
+`http.server.location`.
+
+`clientSettings` renders a `ClientSettingsPolicy` that targets the HTTPS route. It takes the policy's
+`body` (`bufferSize`, `maxSize`, `timeout`) and `keepAlive` (`requests`, `time`, `minTimeout`,
+`timeout.server`, `timeout.header`) fields. Sizes look like `1g` or `16k` and durations like `300s`.
 
 ### `contour`: Contour
 
