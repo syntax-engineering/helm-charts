@@ -1,0 +1,22 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: 2
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [api.acme.example.com, mcp.acme.example.com]
+      grpc:
+        backend: contour
+        hostnames: [grpc.acme.example.com]
+      tailnet:
+        backend: tailscale
+        hostname: acme-sprint-rails
+  worker:
+    kind: Worker
+    replicas: 2

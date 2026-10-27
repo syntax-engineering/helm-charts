@@ -124,3 +124,48 @@ tests:
     values: [schema/bad/cron-with-extra-ports.yaml]
     asserts:
       - failedTemplate: { errorPattern: 'not.* failed' }
+
+  - it: accepts a Web workload with NGF, Contour, and Tailscale ingress entries
+    values: [schema/good/web-with-ingress.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects ingress on a non-Web workload
+    values: [schema/bad/ingress-on-worker.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/workloads/worker.: .not. failed' }
+
+  - it: rejects an ingress entry without a backend
+    values: [schema/bad/ingress-missing-backend.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'missing property .backend.' }
+
+  - it: rejects an NGF entry without hostnames
+    values: [schema/bad/ingress-ngf-missing-hostnames.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'missing property .hostnames.' }
+
+  - it: rejects a Tailscale entry with hostnames
+    values: [schema/bad/ingress-tailscale-with-hostnames.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/tailnet.: .not. failed' }
+
+  - it: rejects an NGF-only field on a Contour entry
+    values: [schema/bad/ingress-contour-with-ngf-field.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
+
+  - it: rejects an ingress entry name that is not a DNS label
+    values: [schema/bad/ingress-bad-entry-name.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '.Public. does not match pattern' }
+
+  - it: rejects tls.clusterIssuer together with tls.acme
+    values: [schema/bad/ingress-issuer-and-acme.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public/tls.: .not. failed' }
+
+  - it: rejects tls.acme on a Contour entry
+    values: [schema/bad/ingress-contour-with-acme.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/grpc/tls.: .not. failed' }

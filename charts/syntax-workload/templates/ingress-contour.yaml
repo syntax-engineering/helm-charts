@@ -1,0 +1,64 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (eq $w.kind "Web") (ne $w.enabled false) }}
+{{- range $key, $in := $w.ingress }}
+{{- if and (eq $in.backend "contour") (ne $in.enabled false) }}
+{{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in }}
+{{- /* HTTPProxy has no cert-manager shim, so the chart asks for the certificate itself. */}}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "sw.ingressName" $c }}
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+    cert-manager.io/solver: contour
+spec:
+  secretName: {{ include "sw.ingressTlsSecret" $c }}
+  issuerRef: { kind: ClusterIssuer, name: {{ include "sw.ingressIssuer" $c }} }
+  dnsNames: {{- toYaml $in.hostnames | nindent 4 }}
+{{- /* An HTTPProxy serves one fqdn, so each hostname gets its own. */}}
+{{- range $in.hostnames }}
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  {{- if eq (len $in.hostnames) 1 }}
+  name: {{ include "sw.ingressName" $c }}
+  {{- else }}
+  name: {{ include "sw.ingressName" $c }}-{{ include "sw.hostLabel" . }}
+  {{- end }}
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+  {{- with $in.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $in.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  virtualhost:
+    fqdn: {{ . | quote }}
+    tls: { secretName: {{ include "sw.ingressTlsSecret" $c }} }
+  routes:
+    - conditions: [{ prefix: / }]
+      services:
+        - name: {{ include "sw.ingressService" $c }}
+          port: {{ $w.port }}
+          {{- with $in.protocol }}
+          protocol: {{ . }}
+          {{- end }}
+          {{- with $in.responseHeaders }}
+          responseHeadersPolicy:
+            set:
+              {{- range $header, $value := . }}
+              - { name: {{ $header }}, value: {{ $value | quote }} }
+              {{- end }}
+          {{- end }}
+      {{- with $in.timeout }}
+      timeoutPolicy: { response: {{ . }}, idle: {{ . }} }
+      {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

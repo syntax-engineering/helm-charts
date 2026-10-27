@@ -1,0 +1,28 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (eq $w.kind "Web") (ne $w.enabled false) }}
+{{- range $key, $in := $w.ingress }}
+{{- if and (eq $in.backend "tailscale") (ne $in.enabled false) }}
+{{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "sw.ingressName" $c }}
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+  {{- with $in.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: {{ include "sw.ingressService" $c }}
+      port: { number: {{ $w.port }} }
+  {{- /* The tls host is the tailnet machine name; the operator provisions the certificate. */}}
+  tls:
+    - hosts: [{{ $in.hostname }}]
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
