@@ -105,29 +105,41 @@ Every backend routes all paths to the workload's Service on its `port`. Every en
 
 ### `ngf`: NGINX Gateway Fabric
 
-Generates a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`.
+Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`.
 
 | Field | Default | Meaning |
 |---|---|---|
 | `hostnames` | required | Public hostnames; a leading `*.` is allowed |
-| `tls.clusterIssuer` | `letsencrypt-prod` | cert-manager ClusterIssuer, set as an annotation on the Gateway |
-| `tls.secretName` | `<name>-tls` | Certificate Secret, in the Gateway's namespace |
+| `tls.secretName` | `<app>-tls` | Certificate Secret, in the Gateway's namespace |
+| `tls.acme.email` | `devops@syntaxdata.com` | ACME account email for the generated Issuer |
+| `tls.acme.server` | Let's Encrypt production | ACME directory URL for the generated Issuer |
+| `tls.clusterIssuer` | none | Use this ClusterIssuer instead of generating an Issuer |
 | `redirectHttp` | `true` | `false` drops the redirect route; the port 80 listeners stay for ACME HTTP-01 |
 | `redirectStatusCode` | `301` | `301` or `308` |
 | `responseHeaders` | none | Map of headers set on every response |
-| `gateway.create` | `true` | `false` attaches the routes to an existing Gateway instead |
-| `gateway.name` | `<name>` | Gateway name |
+| `gateway.create` | `true` | `false` attaches the routes to an existing Gateway, and renders no Gateway or Issuer |
+| `gateway.name` | `<app>-nginx-gateway` | Gateway name |
 | `gateway.namespace` | `nginx-gateway` | Gateway namespace |
 | `gateway.className` | `nginx` | GatewayClass |
 | `gateway.annotations` | none | Extra Gateway annotations, for example `gateway.nginx.org/nginxproxy` |
+
+The Gateway and Secret defaults match the names our apps already use. NGF creates a load balancer for
+each Gateway, so keeping the name keeps the public IP when an app moves its Gateway onto the chart. The
+render fails if two entries would create the same Gateway or write the same Secret; set `gateway.name`
+or `tls.secretName` on one of them.
+
+cert-manager issues the certificate from the Gateway's `cert-manager.io/issuer` annotation. The
+generated Issuer lives next to the Gateway and its HTTP-01 solver attaches the challenge route to that
+Gateway. With `tls.clusterIssuer`, that ClusterIssuer's solver must attach to the Gateway itself.
 
 The Gateway gets an HTTP listener (`http-<host>`) and an HTTPS listener (`https-<host>`) for each
 hostname. In the listener name, `.` becomes `-` and `*` becomes `wildcard`. A shared Gateway used with
 `gateway.create: false` must name its listeners the same way.
 
-The listeners accept routes only from `namespace`. Set `namespace` to the namespace the app really
-runs in. A Kustomize patch that rewrites `metadata.namespace` after rendering does not change the
-Gateway's route selector, so the Gateway would reject the routes.
+The HTTPS listeners accept routes only from `namespace`. The HTTP listeners also accept routes from the
+Gateway's namespace, where cert-manager creates the challenge route. Set `namespace` to the namespace
+the app really runs in. A Kustomize patch that rewrites `metadata.namespace` after rendering does not
+change the Gateway's route selector, so the Gateway would reject the routes.
 
 ### `contour`: Contour
 

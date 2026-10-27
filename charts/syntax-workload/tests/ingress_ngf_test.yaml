@@ -4,22 +4,43 @@ templates:
 values:
   - values/ingress.yaml
 tests:
-  - it: renders a Gateway, an HTTPS route, and a redirect route
+  - it: renders an Issuer, a Gateway, an HTTPS route, and a redirect route
     asserts:
-      - hasDocuments: { count: 3 }
+      - hasDocuments: { count: 4 }
 
-  - it: renders the Gateway in nginx-gateway with a cert-manager issuer
+  # The Issuer's HTTP-01 solver attaches the challenge route to this Gateway.
+  - it: renders an ACME Issuer next to the Gateway, wired to it
     documentIndex: 0
+    asserts:
+      - isKind: { of: Issuer }
+      - isAPIVersion: { of: cert-manager.io/v1 }
+      - equal: { path: metadata.name, value: acme-nginx-gateway-acme }
+      - equal: { path: metadata.namespace, value: nginx-gateway }
+      - equal:
+          path: spec
+          value:
+            acme:
+              server: https://acme-v02.api.letsencrypt.org/directory
+              email: devops@syntaxdata.com
+              privateKeySecretRef: { name: acme-nginx-gateway-acme-account }
+              solvers:
+                - http01:
+                    gatewayHTTPRoute:
+                      parentRefs: [{ group: gateway.networking.k8s.io, kind: Gateway, name: acme-nginx-gateway, namespace: nginx-gateway }]
+
+  - it: renders the Gateway in nginx-gateway, issued by its own Issuer
+    documentIndex: 1
     asserts:
       - isKind: { of: Gateway }
       - isAPIVersion: { of: gateway.networking.k8s.io/v1 }
-      - equal: { path: metadata.name, value: acme-web-public }
+      - equal: { path: metadata.name, value: acme-nginx-gateway }
       - equal: { path: metadata.namespace, value: nginx-gateway }
-      - equal: { path: metadata.annotations, value: { cert-manager.io/cluster-issuer: letsencrypt-prod } }
+      - equal: { path: metadata.annotations, value: { cert-manager.io/issuer: acme-nginx-gateway-acme } }
       - equal: { path: spec.gatewayClassName, value: nginx }
 
-  - it: gives each hostname an HTTP and an HTTPS listener open only to the app namespace
-    documentIndex: 0
+  # HTTP listeners also accept routes from the Gateway's namespace, where cert-manager puts the challenge route.
+  - it: gives each hostname an HTTP and an HTTPS listener
+    documentIndex: 1
     asserts:
       - equal:
           path: spec.listeners
@@ -28,27 +49,27 @@ tests:
               hostname: api.acme.example.com
               port: 80
               protocol: HTTP
-              allowedRoutes: { namespaces: { from: Selector, selector: { matchLabels: { kubernetes.io/metadata.name: acme-env } } } }
+              allowedRoutes: { namespaces: { from: Selector, selector: { matchExpressions: [{ key: kubernetes.io/metadata.name, operator: In, values: [acme-env, nginx-gateway] }] } } }
             - name: https-api-acme-example-com
               hostname: api.acme.example.com
               port: 443
               protocol: HTTPS
-              tls: { mode: Terminate, certificateRefs: [{ group: '', kind: Secret, name: acme-web-public-tls }] }
+              tls: { mode: Terminate, certificateRefs: [{ group: '', kind: Secret, name: acme-tls }] }
               allowedRoutes: { namespaces: { from: Selector, selector: { matchLabels: { kubernetes.io/metadata.name: acme-env } } } }
             - name: http-mcp-acme-example-com
               hostname: mcp.acme.example.com
               port: 80
               protocol: HTTP
-              allowedRoutes: { namespaces: { from: Selector, selector: { matchLabels: { kubernetes.io/metadata.name: acme-env } } } }
+              allowedRoutes: { namespaces: { from: Selector, selector: { matchExpressions: [{ key: kubernetes.io/metadata.name, operator: In, values: [acme-env, nginx-gateway] }] } } }
             - name: https-mcp-acme-example-com
               hostname: mcp.acme.example.com
               port: 443
               protocol: HTTPS
-              tls: { mode: Terminate, certificateRefs: [{ group: '', kind: Secret, name: acme-web-public-tls }] }
+              tls: { mode: Terminate, certificateRefs: [{ group: '', kind: Secret, name: acme-tls }] }
               allowedRoutes: { namespaces: { from: Selector, selector: { matchLabels: { kubernetes.io/metadata.name: acme-env } } } }
 
   - it: routes HTTPS traffic for every hostname to the workload's Service
-    documentIndex: 1
+    documentIndex: 2
     asserts:
       - isKind: { of: HTTPRoute }
       - equal: { path: metadata.name, value: acme-web-public }
@@ -57,8 +78,8 @@ tests:
       - equal:
           path: spec.parentRefs
           value:
-            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-web-public, namespace: nginx-gateway, sectionName: https-api-acme-example-com }
-            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-web-public, namespace: nginx-gateway, sectionName: https-mcp-acme-example-com }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-nginx-gateway, namespace: nginx-gateway, sectionName: https-api-acme-example-com }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-nginx-gateway, namespace: nginx-gateway, sectionName: https-mcp-acme-example-com }
       - equal: { path: spec.hostnames, value: [api.acme.example.com, mcp.acme.example.com] }
       - equal:
           path: spec.rules
@@ -67,22 +88,22 @@ tests:
               backendRefs: [{ group: '', kind: Service, name: acme-web, port: 8080 }]
 
   - it: redirects plain HTTP to HTTPS with a 301
-    documentIndex: 2
+    documentIndex: 3
     asserts:
       - isKind: { of: HTTPRoute }
       - equal: { path: metadata.name, value: acme-web-public-redirect }
       - equal:
           path: spec.parentRefs
           value:
-            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-web-public, namespace: nginx-gateway, sectionName: http-api-acme-example-com }
-            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-web-public, namespace: nginx-gateway, sectionName: http-mcp-acme-example-com }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-nginx-gateway, namespace: nginx-gateway, sectionName: http-api-acme-example-com }
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-nginx-gateway, namespace: nginx-gateway, sectionName: http-mcp-acme-example-com }
       - equal:
           path: spec.rules
           value:
             - matches: [{ path: { type: PathPrefix, value: / } }]
               filters: [{ type: RequestRedirect, requestRedirect: { scheme: https, statusCode: 301 } }]
 
-  - it: attaches to an existing Gateway without rendering one
+  - it: attaches to an existing Gateway without rendering a Gateway or an Issuer
     set:
       workloads.web.ingress.public.gateway: { create: false, name: shared, namespace: edge }
     asserts:
@@ -91,42 +112,63 @@ tests:
       - equal: { path: 'spec.parentRefs[0].name', value: shared }
       - equal: { path: 'spec.parentRefs[0].namespace', value: edge }
 
-  - it: honors Gateway, TLS, redirect, and annotation overrides
+  - it: uses a ClusterIssuer instead of its own Issuer when tls.clusterIssuer is set
+    set:
+      workloads.web.ingress.public.tls: { clusterIssuer: letsencrypt-prod }
+    asserts:
+      - hasDocuments: { count: 3 }
+      - isKind: { of: Gateway }
+        documentIndex: 0
+      - equal: { path: metadata.annotations, value: { cert-manager.io/cluster-issuer: letsencrypt-prod } }
+        documentIndex: 0
+
+  - it: honors ACME, Gateway, TLS, redirect, and annotation overrides
     set:
       workloads.web.serviceName: acme-svc
       workloads.web.ingress.public:
         hostnames: ['*.acme.example.com']
         redirectStatusCode: 308
         annotations: { team: core }
-        tls: { clusterIssuer: letsencrypt-staging, secretName: acme-tls }
+        tls:
+          secretName: acme-wildcard-tls
+          acme: { email: ops@example.com, server: https://acme-staging-v02.api.letsencrypt.org/directory }
         gateway:
-          name: acme-nginx-gateway
+          name: edge
+          namespace: gateways
           className: nginx-internal
           annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
     asserts:
+      - equal: { path: metadata.name, value: edge-acme }
+        documentIndex: 0
+      - equal: { path: metadata.namespace, value: gateways }
+        documentIndex: 0
+      - equal: { path: spec.acme.email, value: ops@example.com }
+        documentIndex: 0
+      - equal: { path: spec.acme.server, value: https://acme-staging-v02.api.letsencrypt.org/directory }
+        documentIndex: 0
       - equal:
           path: metadata.annotations
-          value: { cert-manager.io/cluster-issuer: letsencrypt-staging, gateway.nginx.org/nginxproxy: global-proxy-config }
-        documentIndex: 0
-      - equal: { path: metadata.name, value: acme-nginx-gateway }
-        documentIndex: 0
+          value: { cert-manager.io/issuer: edge-acme, gateway.nginx.org/nginxproxy: global-proxy-config }
+        documentIndex: 1
       - equal: { path: spec.gatewayClassName, value: nginx-internal }
-        documentIndex: 0
+        documentIndex: 1
+      - equal: { path: 'spec.listeners[0].allowedRoutes.namespaces.selector.matchExpressions[0].values', value: [acme-env, gateways] }
+        documentIndex: 1
       - equal: { path: 'spec.listeners[1].name', value: https-wildcard-acme-example-com }
-        documentIndex: 0
-      - equal: { path: 'spec.listeners[1].tls.certificateRefs[0].name', value: acme-tls }
-        documentIndex: 0
+        documentIndex: 1
+      - equal: { path: 'spec.listeners[1].tls.certificateRefs[0].name', value: acme-wildcard-tls }
+        documentIndex: 1
       - equal: { path: metadata.annotations, value: { team: core } }
-        documentIndex: 1
-      - equal: { path: 'spec.rules[0].backendRefs[0].name', value: acme-svc }
-        documentIndex: 1
-      - equal: { path: 'spec.rules[0].filters[0].requestRedirect.statusCode', value: 308 }
         documentIndex: 2
+      - equal: { path: 'spec.rules[0].backendRefs[0].name', value: acme-svc }
+        documentIndex: 2
+      - equal: { path: 'spec.rules[0].filters[0].requestRedirect.statusCode', value: 308 }
+        documentIndex: 3
 
   - it: sets response headers on the HTTPS route
     set:
       workloads.web.ingress.public.responseHeaders: { Strict-Transport-Security: max-age=2592000; includeSubDomains }
-    documentIndex: 1
+    documentIndex: 2
     asserts:
       - equal:
           path: 'spec.rules[0].filters'
@@ -138,11 +180,29 @@ tests:
   - it: drops only the redirect route when redirectHttp is false
     set: { workloads.web.ingress.public.redirectHttp: false }
     asserts:
-      - hasDocuments: { count: 2 }
+      - hasDocuments: { count: 3 }
       - lengthEqual: { path: spec.listeners, count: 4 }
-        documentIndex: 0
-      - notEqual: { path: metadata.name, value: acme-web-public-redirect }
         documentIndex: 1
+      - notEqual: { path: metadata.name, value: acme-web-public-redirect }
+        documentIndex: 2
+
+  - it: fails when two entries would render the same Gateway
+    set:
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com] }
+    asserts:
+      - failedTemplate: { errorPattern: 'ngf entries "web/internal" and "web/public" would both render Gateway nginx-gateway/acme-nginx-gateway; set gateway.name on one of them' }
+
+  - it: fails when two Gateways in one namespace would share a TLS secret
+    set:
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: { name: acme-internal } }
+    asserts:
+      - failedTemplate: { errorPattern: 'ngf entries "web/internal" and "web/public" would both write TLS secret nginx-gateway/acme-tls; set tls.secretName on one of them' }
+
+  - it: allows two entries with distinct Gateways and secrets
+    set:
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: { name: acme-internal }, tls: { secretName: acme-internal-tls } }
+    asserts:
+      - hasDocuments: { count: 8 }
 
   - it: renders nothing for a disabled entry
     set: { workloads.web.ingress.public.enabled: false }

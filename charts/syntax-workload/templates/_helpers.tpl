@@ -194,8 +194,49 @@ ports:
 {{- .w.serviceName | default (include "sw.fullname" .) -}}
 {{- end }}
 
+{{/* NGF defaults match the names apps already use, so migrating keeps the Gateway's load balancer and certificate. */}}
 {{- define "sw.ingressTlsSecret" -}}
-{{- dig "tls" "secretName" (printf "%s-tls" (include "sw.ingressName" .)) .in -}}
+{{- $default := printf "%s-tls" (include "sw.ingressName" .) -}}
+{{- if eq .in.backend "ngf" }}{{ $default = printf "%s-tls" .root.Values.app }}{{ end -}}
+{{- dig "tls" "secretName" $default .in -}}
+{{- end }}
+
+{{- define "sw.ngfGatewayName" -}}
+{{- dig "gateway" "name" (printf "%s-nginx-gateway" .root.Values.app) .in -}}
+{{- end }}
+
+{{- define "sw.ngfGatewayNamespace" -}}
+{{- dig "gateway" "namespace" "nginx-gateway" .in -}}
+{{- end }}
+
+{{/*
+Fails the render when two NGF entries that create a Gateway would render the
+same Gateway, or would write the same TLS Secret in one namespace.
+*/}}
+{{- define "sw.assertUniqueGateways" -}}
+{{- $gateways := dict -}}
+{{- $secrets := dict -}}
+{{- range $name, $w := .Values.workloads -}}
+{{- if and (eq $w.kind "Web") (ne $w.enabled false) -}}
+{{- range $key, $in := $w.ingress -}}
+{{- if and (eq $in.backend "ngf") (ne $in.enabled false) (ne (dig "gateway" "create" true $in) false) -}}
+{{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in -}}
+{{- $id := printf "%s/%s" $name $key -}}
+{{- $ns := include "sw.ngfGatewayNamespace" $c -}}
+{{- $gw := printf "%s/%s" $ns (include "sw.ngfGatewayName" $c) -}}
+{{- $secret := printf "%s/%s" $ns (include "sw.ingressTlsSecret" $c) -}}
+{{- with get $gateways $gw -}}
+{{- fail (printf "ngf entries %q and %q would both render Gateway %s; set gateway.name on one of them" . $id $gw) -}}
+{{- end -}}
+{{- with get $secrets $secret -}}
+{{- fail (printf "ngf entries %q and %q would both write TLS secret %s; set tls.secretName on one of them" . $id $secret) -}}
+{{- end -}}
+{{- $_ := set $gateways $gw $id -}}
+{{- $_ := set $secrets $secret $id -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
 {{- end }}
 
 {{- define "sw.ingressIssuer" -}}

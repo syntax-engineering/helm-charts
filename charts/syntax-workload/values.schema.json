@@ -153,8 +153,17 @@
           "additionalProperties": false,
           "properties": {
             "clusterIssuer": { "type": "string", "minLength": 1 },
-            "secretName": { "type": "string", "minLength": 1 }
-          }
+            "secretName": { "type": "string", "minLength": 1 },
+            "acme": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "email": { "type": "string", "minLength": 1 },
+                "server": { "type": "string", "pattern": "^https://" }
+              }
+            }
+          },
+          "not": { "required": ["clusterIssuer", "acme"] }
         },
         "responseHeaders": { "$ref": "#/$defs/stringMap" },
         "redirectHttp": { "type": "boolean" },
@@ -186,6 +195,7 @@
           "if": { "properties": { "backend": { "const": "contour" } }, "required": ["backend"] },
           "then": {
             "required": ["hostnames"],
+            "properties": { "tls": { "not": { "required": ["acme"] } } },
             "not": { "anyOf": [{ "required": ["hostname"] }, { "required": ["gateway"] }, { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }] }
           }
         },

@@ -159,3 +159,13 @@ tests:
     values: [schema/bad/ingress-bad-entry-name.yaml]
     asserts:
       - failedTemplate: { errorPattern: '.Public. does not match pattern' }
+
+  - it: rejects tls.clusterIssuer together with tls.acme
+    values: [schema/bad/ingress-issuer-and-acme.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public/tls.: .not. failed' }
+
+  - it: rejects tls.acme on a Contour entry
+    values: [schema/bad/ingress-contour-with-acme.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/grpc/tls.: .not. failed' }

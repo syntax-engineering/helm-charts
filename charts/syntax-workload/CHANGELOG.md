@@ -8,9 +8,11 @@ No rendered-output change for existing values.
 
 Added (all optional):
 - `ingress` on Web workloads: a map of named entries, each with a `backend`.
-  - `ngf`: a Gateway with HTTP and HTTPS listeners per hostname (cert-manager issues the certificate
-    through the Gateway annotation), an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect route.
-    `gateway.create: false` attaches the routes to an existing Gateway.
+  - `ngf`: a Gateway with HTTP and HTTPS listeners per hostname, an HTTPS `HTTPRoute`, and an
+    HTTP-to-HTTPS redirect route. The Gateway is named `<app>-nginx-gateway` and uses Secret
+    `<app>-tls` by default, matching existing apps. An ACME `Issuer` next to the Gateway issues the
+    certificate, with its HTTP-01 solver attached to that Gateway; `tls.clusterIssuer` uses a
+    ClusterIssuer instead. `gateway.create: false` attaches the routes to an existing Gateway.
   - `contour`: a cert-manager `Certificate` and one `HTTPProxy` per hostname, with optional
     `protocol`, `timeout`, and `className`.
   - `tailscale`: an `Ingress` with `ingressClassName: tailscale` on the workload's Service port.

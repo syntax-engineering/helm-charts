@@ -1,12 +1,35 @@
+{{- include "sw.assertUniqueGateways" . }}
 {{- range $name, $w := .Values.workloads }}
 {{- if and (eq $w.kind "Web") (ne $w.enabled false) }}
 {{- range $key, $in := $w.ingress }}
 {{- if and (eq $in.backend "ngf") (ne $in.enabled false) }}
 {{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in }}
 {{- $gw := $in.gateway | default dict }}
-{{- $gwName := $gw.name | default (include "sw.ingressName" $c) }}
-{{- $gwNamespace := $gw.namespace | default "nginx-gateway" }}
+{{- $gwName := include "sw.ngfGatewayName" $c }}
+{{- $gwNamespace := include "sw.ngfGatewayNamespace" $c }}
 {{- if ne $gw.create false }}
+{{- $issuer := dict "cert-manager.io/cluster-issuer" (dig "tls" "clusterIssuer" "" $in) }}
+{{- if not (dig "tls" "clusterIssuer" "" $in) }}
+{{- $issuer = dict "cert-manager.io/issuer" (printf "%s-acme" $gwName) }}
+{{- /* Its HTTP-01 solver attaches the challenge route to this Gateway; without parentRefs the route attaches nowhere. */}}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $gwName }}-acme
+  namespace: {{ $gwNamespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+spec:
+  acme:
+    server: {{ dig "tls" "acme" "server" "https://acme-v02.api.letsencrypt.org/directory" $in }}
+    email: {{ dig "tls" "acme" "email" "devops@syntaxdata.com" $in }}
+    privateKeySecretRef: { name: {{ $gwName }}-acme-account }
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ $gwName }}, namespace: {{ $gwNamespace }} }
+{{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -14,11 +37,12 @@ metadata:
   name: {{ $gwName }}
   namespace: {{ $gwNamespace }}
   labels: {{- include "sw.selector" $c | nindent 4 }}
-  annotations: {{- toYaml (merge (dict "cert-manager.io/cluster-issuer" (include "sw.ingressIssuer" $c)) ($gw.annotations | default dict)) | nindent 4 }}
+  annotations: {{- toYaml (merge $issuer ($gw.annotations | default dict)) | nindent 4 }}
 spec:
   gatewayClassName: {{ $gw.className | default "nginx" }}
   listeners:
     {{- range $in.hostnames }}
+    {{- /* cert-manager creates the challenge route in the Gateway's namespace, so port 80 accepts routes from there too. */}}
     - name: http-{{ include "sw.hostLabel" . }}
       hostname: {{ . | quote }}
       port: 80
@@ -26,7 +50,7 @@ spec:
       allowedRoutes:
         namespaces:
           from: Selector
-          selector: { matchLabels: { kubernetes.io/metadata.name: {{ $.Values.namespace }} } }
+          selector: { matchExpressions: [{ key: kubernetes.io/metadata.name, operator: In, values: [{{ $.Values.namespace }}, {{ $gwNamespace }}] }] }
     - name: https-{{ include "sw.hostLabel" . }}
       hostname: {{ . | quote }}
       port: 443
