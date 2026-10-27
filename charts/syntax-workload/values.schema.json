@@ -155,6 +155,8 @@
           "properties": {
             "clusterIssuer": { "type": "string", "minLength": 1 },
             "secretName": { "type": "string", "minLength": 1 },
+            "perHost": { "type": "boolean" },
+            "secretNames": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
             "acme": {
               "type": "object",
               "additionalProperties": false,
@@ -165,7 +167,11 @@
               }
             }
           },
-          "not": { "required": ["clusterIssuer", "acme"] }
+          "allOf": [
+            { "not": { "required": ["clusterIssuer", "acme"] } },
+            { "if": { "required": ["secretNames"] }, "then": { "required": ["perHost"], "properties": { "perHost": { "const": true } } } },
+            { "if": { "required": ["perHost"], "properties": { "perHost": { "const": true } } }, "then": { "not": { "required": ["secretName"] } } }
+          ]
         },
         "responseHeaders": { "$ref": "#/$defs/stringMap" },
         "paths": {
@@ -204,7 +210,12 @@
           "if": { "properties": { "backend": { "const": "ngf" } }, "required": ["backend"] },
           "then": {
             "required": ["hostnames"],
-            "not": { "anyOf": [{ "required": ["hostname"] }, { "required": ["className"] }, { "required": ["protocol"] }, { "required": ["timeout"] }] }
+            "not": {
+              "anyOf": [
+                { "required": ["hostname"] }, { "required": ["className"] }, { "required": ["protocol"] }, { "required": ["timeout"] },
+                { "required": ["tls"], "properties": { "tls": { "anyOf": [{ "required": ["perHost"] }, { "required": ["secretNames"] }] } } }
+              ]
+            }
           }
         },
         {

@@ -287,6 +287,24 @@ spec:
     solvers: {{- toYaml (list $solver) | nindent 6 }}
 {{- end }}
 
+{{/*
+The cert-manager Certificate a contour entry renders, since HTTPProxy has no cert-manager shim.
+dict "c" <ingress context> "name" <name> "secretName" <Secret> "issuerRef" <issuerRef map> "dnsNames" <list>.
+*/}}
+{{- define "sw.contourCertificate" -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .name }}
+  namespace: {{ .c.root.Values.namespace }}
+  labels: {{- include "sw.selector" .c | nindent 4 }}
+    cert-manager.io/solver: contour
+spec:
+  secretName: {{ .secretName }}
+  issuerRef: { kind: {{ .issuerRef.kind }}, name: {{ .issuerRef.name }} }
+  dnsNames: {{- toYaml .dnsNames | nindent 4 }}
+{{- end }}
+
 {{/* A hostname as a DNS label: "*.a.example.com" -> "wildcard-a-example-com". */}}
 {{- define "sw.hostLabel" -}}
 {{- . | replace "*" "wildcard" | replace "." "-" -}}

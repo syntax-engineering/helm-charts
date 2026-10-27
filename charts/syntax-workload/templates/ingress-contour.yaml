@@ -12,31 +12,39 @@
 {{ include "sw.acmeIssuer" (dict "c" $c "name" $issuerRef.name "namespace" $.Values.namespace "solver" (dict "http01" (dict "ingress" (dict "ingressClassName" ($in.className | default "contour"))))) }}
 {{- end }}
 {{- /* HTTPProxy has no cert-manager shim, so the chart asks for the certificate itself. */}}
+{{- $perHost := dig "tls" "perHost" false $in }}
+{{- $secretNames := dig "tls" "secretNames" (dict) $in }}
+{{- $seen := dict }}
+{{- range $host, $_ := $secretNames }}
+{{- if not (has $host $in.hostnames) }}
+{{- fail (printf "contour entry %s/%s: tls.secretNames has %s, which is not in hostnames" $name $key $host) }}
+{{- end }}
+{{- end }}
+{{- if not $perHost }}
 ---
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: {{ include "sw.ingressName" $c }}
-  namespace: {{ $.Values.namespace }}
-  labels: {{- include "sw.selector" $c | nindent 4 }}
-    cert-manager.io/solver: contour
-spec:
-  secretName: {{ include "sw.ingressTlsSecret" $c }}
-  issuerRef: { kind: {{ $issuerRef.kind }}, name: {{ $issuerRef.name }} }
-  dnsNames: {{- toYaml $in.hostnames | nindent 4 }}
+{{ include "sw.contourCertificate" (dict "c" $c "name" (include "sw.ingressName" $c) "secretName" (include "sw.ingressTlsSecret" $c) "issuerRef" $issuerRef "dnsNames" $in.hostnames) }}
+{{- end }}
 {{- /* protocol describes the workload's Service, so path rules to other Services leave it out. */}}
 {{- $routes := prepend ($in.paths | default list) (dict "prefix" "/" "service" (include "sw.ingressService" $c) "port" $w.port "protocol" $in.protocol) }}
 {{- /* An HTTPProxy serves one fqdn, so each hostname gets its own. */}}
-{{- range $in.hostnames }}
+{{- range $host := $in.hostnames }}
+{{- $objName := include "sw.ingressName" $c }}
+{{- if gt (len $in.hostnames) 1 }}{{ $objName = printf "%s-%s" $objName (include "sw.hostLabel" .) }}{{ end }}
+{{- $secret := include "sw.ingressTlsSecret" $c }}
+{{- if $perHost }}
+{{- $secret = get $secretNames . | default (printf "%s-tls" $objName) }}
+{{- with get $seen $secret }}
+{{- fail (printf "contour entry %s/%s: hostnames %s and %s would both write TLS secret %s; set tls.secretNames for one of them" $name $key . $host $secret) }}
+{{- end }}
+{{- $_ := set $seen $secret . }}
+---
+{{ include "sw.contourCertificate" (dict "c" $c "name" $objName "secretName" $secret "issuerRef" $issuerRef "dnsNames" (list .)) }}
+{{- end }}
 ---
 apiVersion: projectcontour.io/v1
 kind: HTTPProxy
 metadata:
-  {{- if eq (len $in.hostnames) 1 }}
-  name: {{ include "sw.ingressName" $c }}
-  {{- else }}
-  name: {{ include "sw.ingressName" $c }}-{{ include "sw.hostLabel" . }}
-  {{- end }}
+  name: {{ $objName }}
   namespace: {{ $.Values.namespace }}
   labels: {{- include "sw.selector" $c | nindent 4 }}
   {{- with $in.annotations }}
@@ -48,7 +56,7 @@ spec:
   {{- end }}
   virtualhost:
     fqdn: {{ . | quote }}
-    tls: { secretName: {{ include "sw.ingressTlsSecret" $c }} }
+    tls: { secretName: {{ $secret }} }
   routes:
     {{- range $route := $routes }}
     - conditions: [{ prefix: {{ $route.prefix }} }]

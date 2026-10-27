@@ -15,7 +15,8 @@ Added (all optional):
     ClusterIssuer instead. `gateway.create: false` attaches the routes to an existing Gateway.
   - `contour`: an ACME `Issuer` that solves HTTP-01 through a Contour Ingress, a cert-manager
     `Certificate`, and one `HTTPProxy` per hostname, with optional `protocol`, `timeout`, and
-    `className`. `tls.clusterIssuer` uses a ClusterIssuer instead.
+    `className`. `tls.clusterIssuer` uses a ClusterIssuer instead. `tls.perHost: true` renders a
+    Certificate and Secret per hostname, with optional `tls.secretNames` to name each Secret.
   - `ngf` and `contour` share `tls.acme.{email,server,waitInsteadOfSelfCheck}` for the generated
     Issuer.
   - `ngf` and `contour` take `paths: [{prefix, service, port}]`, which sends extra path prefixes

@@ -200,6 +200,12 @@ change the Gateway's route selector, so the Gateway would reject the routes.
 Generates an ACME `Issuer`, a cert-manager `Certificate` for all hostnames, and one `HTTPProxy` per
 hostname. With more than one hostname, each HTTPProxy name ends in `-<host>`.
 
+Set `tls.perHost: true` to give each hostname its own Certificate and Secret instead, for example when
+each domain belongs to a different customer. Each Certificate takes its HTTPProxy's name, and its Secret
+defaults to that name plus `-tls`. `tls.secretNames` maps a hostname to a Secret name, so an app can keep
+the Secrets it already has. The render fails if a `tls.secretNames` key is not in `hostnames`, or if two
+hostnames would write the same Secret.
+
 HTTPProxy has no cert-manager shim, so the chart renders the Certificate. The generated Issuer, in the
 app namespace, solves HTTP-01 through an Ingress with the entry's `className` (default `contour`), which
 the same Contour serves. With `tls.clusterIssuer`, the Certificate carries the label
@@ -209,6 +215,8 @@ the same Contour serves. With `tls.clusterIssuer`, the Certificate carries the l
 |---|---|---|
 | `hostnames` | required | Public hostnames |
 | `tls.secretName` | `<workload fullname>-<entry>-tls`, or `<name>-tls` when `name` is set | Certificate Secret, in the app namespace |
+| `tls.perHost` | `false` | One Certificate and Secret per hostname; cannot be combined with `tls.secretName` |
+| `tls.secretNames` | none | Map of hostname to Secret name for `tls.perHost`; unlisted hostnames use the default |
 | `protocol` | none | Upstream protocol: `h2c` for plaintext gRPC, or `h2` or `tls` |
 | `timeout` | none | Response and idle timeout, for example `20m` |
 | `responseHeaders` | none | Map of headers set on every response |
