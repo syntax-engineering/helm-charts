@@ -68,8 +68,9 @@ spec:
     {{- end }}
   hostnames: {{- toYaml $in.hostnames | nindent 4 }}
   rules:
+    {{- range $rule := prepend ($in.paths | default list) (dict "prefix" "/" "service" (include "sw.ingressService" $c) "port" $w.port) }}
     - matches:
-        - path: { type: PathPrefix, value: / }
+        - path: { type: PathPrefix, value: {{ $rule.prefix }} }
       {{- with $in.responseHeaders }}
       filters:
         - type: ResponseHeaderModifier
@@ -80,7 +81,8 @@ spec:
               {{- end }}
       {{- end }}
       backendRefs:
-        - { group: '', kind: Service, name: {{ include "sw.ingressService" $c }}, port: {{ $w.port }} }
+        - { group: '', kind: Service, name: {{ $rule.service }}, port: {{ $rule.port }} }
+    {{- end }}
 {{- if ne $in.redirectHttp false }}
 ---
 apiVersion: gateway.networking.k8s.io/v1

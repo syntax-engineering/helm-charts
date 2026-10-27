@@ -11,9 +11,11 @@ workloads:
       public:
         backend: ngf
         hostnames: [api.acme.example.com, mcp.acme.example.com]
+        paths: [{ prefix: /assets, service: acme-assets-svc, port: 80 }]
       grpc:
         backend: contour
         hostnames: [grpc.acme.example.com]
+        paths: [{ prefix: /packs, service: acme-assets-svc, port: 80 }]
       tailnet:
         backend: tailscale
         hostname: acme-sprint-rails

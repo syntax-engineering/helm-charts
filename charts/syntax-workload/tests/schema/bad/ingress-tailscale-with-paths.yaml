@@ -1,0 +1,14 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: 2
+    ingress:
+      tailnet:
+        backend: tailscale
+        hostname: acme-rails
+        paths: [{ prefix: /assets, service: acme-assets-svc, port: 80 }]
