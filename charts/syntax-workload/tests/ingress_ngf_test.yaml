@@ -208,6 +208,82 @@ tests:
     asserts:
       - lengthEqual: { path: spec.rules, count: 1 }
 
+  # NGF reads snippets only when it runs with snippets enabled.
+  - it: attaches a SnippetsFilter to the HTTPS route, after the response headers
+    set:
+      workloads.web.ingress.public.responseHeaders: { X-Frame-Options: DENY }
+      workloads.web.ingress.public.snippets:
+        http.server: ssl_ciphers HIGH:!aNULL:!MD5;
+        http.server.location: proxy_read_timeout 3600s;
+    asserts:
+      - hasDocuments: { count: 5 }
+      - equal:
+          path: 'spec.rules[0].filters'
+          value:
+            - type: ResponseHeaderModifier
+              responseHeaderModifier: { set: [{ name: X-Frame-Options, value: DENY }] }
+            - type: ExtensionRef
+              extensionRef: { group: gateway.nginx.org, kind: SnippetsFilter, name: acme-web-public }
+        documentIndex: 2
+      - isKind: { of: SnippetsFilter }
+        documentIndex: 4
+      - isAPIVersion: { of: gateway.nginx.org/v1alpha1 }
+        documentIndex: 4
+      - equal: { path: metadata.name, value: acme-web-public }
+        documentIndex: 4
+      - equal: { path: metadata.namespace, value: acme-env }
+        documentIndex: 4
+      - equal: { path: metadata.labels, value: { app: acme, role: web } }
+        documentIndex: 4
+      - equal:
+          path: spec.snippets
+          value:
+            - { context: http.server, value: ssl_ciphers HIGH:!aNULL:!MD5; }
+            - { context: http.server.location, value: proxy_read_timeout 3600s; }
+        documentIndex: 4
+
+  - it: adds no filter to the redirect route
+    set:
+      workloads.web.ingress.public.snippets: { http.server.location: proxy_read_timeout 3600s; }
+    documentIndex: 3
+    asserts:
+      - equal: { path: 'spec.rules[0].filters', value: [{ type: RequestRedirect, requestRedirect: { scheme: https, statusCode: 301 } }] }
+
+  - it: renders a ClientSettingsPolicy that targets the HTTPS route
+    set:
+      workloads.web.ingress.public.clientSettings:
+        body: { maxSize: 1g, timeout: 300s }
+        keepAlive: { requests: 1000 }
+    asserts:
+      - hasDocuments: { count: 5 }
+      - isKind: { of: ClientSettingsPolicy }
+        documentIndex: 4
+      - isAPIVersion: { of: gateway.nginx.org/v1alpha1 }
+        documentIndex: 4
+      - equal: { path: metadata.name, value: acme-web-public }
+        documentIndex: 4
+      - equal: { path: metadata.namespace, value: acme-env }
+        documentIndex: 4
+      - equal:
+          path: spec
+          value:
+            targetRef: { group: gateway.networking.k8s.io, kind: HTTPRoute, name: acme-web-public }
+            body: { maxSize: 1g, timeout: 300s }
+            keepAlive: { requests: 1000 }
+        documentIndex: 4
+
+  - it: renders both policies when an existing Gateway is used
+    set:
+      workloads.web.ingress.public.gateway: { create: false, name: shared, namespace: edge }
+      workloads.web.ingress.public.snippets: { http.server.location: proxy_read_timeout 3600s; }
+      workloads.web.ingress.public.clientSettings: { body: { maxSize: 1g } }
+    asserts:
+      - hasDocuments: { count: 4 }
+      - isKind: { of: SnippetsFilter }
+        documentIndex: 2
+      - isKind: { of: ClientSettingsPolicy }
+        documentIndex: 3
+
   # The HTTP listeners stay: cert-manager's HTTP-01 challenge needs port 80.
   - it: drops only the redirect route when redirectHttp is false
     set: { workloads.web.ingress.public.redirectHttp: false }

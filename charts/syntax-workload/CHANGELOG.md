@@ -25,6 +25,9 @@ Added (all optional):
   - `ngf` and `contour` take `paths: [{prefix, service, port}]`, which sends extra path prefixes
     to another Service: extra `HTTPRoute` rules or `HTTPProxy` routes. `/` still goes to the
     workload's Service.
+  - `ngf` entries can set `snippets` (a map of NGINX context to config) and `clientSettings` (request
+    body and keep-alive limits). They render a `SnippetsFilter` on the HTTPS route and a
+    `ClientSettingsPolicy` that targets it.
   - `tailscale`: an `Ingress` with `ingressClassName: tailscale` on the workload's Service port.
   - `name` on any entry replaces the `<fullname>-<entry>` object name, so an entry can be renamed
     without replacing its objects. The render fails if two entries with the same backend would use

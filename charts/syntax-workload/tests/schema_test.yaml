@@ -220,3 +220,18 @@ tests:
     values: [schema/bad/ingress-ngf-per-host.yaml]
     asserts:
       - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
+
+  - it: rejects a snippet in a context NGF does not allow
+    values: [schema/bad/ingress-bad-snippet-context.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'additional properties .server. not allowed' }
+
+  - it: rejects a client body size NGF cannot parse
+    values: [schema/bad/ingress-bad-body-size.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'maxSize.: .1GB. does not match pattern' }
+
+  - it: rejects NGF policies on a Contour entry
+    values: [schema/bad/ingress-contour-with-snippets.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
