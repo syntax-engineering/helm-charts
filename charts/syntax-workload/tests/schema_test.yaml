@@ -235,3 +235,8 @@ tests:
     values: [schema/bad/ingress-contour-with-snippets.yaml]
     asserts:
       - failedTemplate: { errorPattern: '/ingress/public.: .not. failed' }
+
+  - it: rejects an NGF timeout that NGF cannot parse
+    values: [schema/bad/ingress-ngf-bad-timeout.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingress/public/timeout.: .infinity. does not match pattern' }

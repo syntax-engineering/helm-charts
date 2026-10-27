@@ -284,6 +284,30 @@ tests:
       - isKind: { of: ClientSettingsPolicy }
         documentIndex: 3
 
+  # NGF ignores HTTPRoute rule timeouts, so the timeout goes on a ProxySettingsPolicy instead.
+  - it: sets proxy read and send timeouts on the HTTPS route through a ProxySettingsPolicy
+    set: { workloads.web.ingress.public.timeout: 20m }
+    asserts:
+      - hasDocuments: { count: 5 }
+      - notExists: { path: 'spec.rules[0].timeouts' }
+        documentIndex: 2
+      - isKind: { of: ProxySettingsPolicy }
+        documentIndex: 4
+      - isAPIVersion: { of: gateway.nginx.org/v1alpha1 }
+        documentIndex: 4
+      - equal: { path: metadata.name, value: acme-web-public }
+        documentIndex: 4
+      - equal: { path: metadata.namespace, value: acme-env }
+        documentIndex: 4
+      - equal: { path: metadata.labels, value: { app: acme, role: web } }
+        documentIndex: 4
+      - equal:
+          path: spec
+          value:
+            targetRefs: [{ group: gateway.networking.k8s.io, kind: HTTPRoute, name: acme-web-public }]
+            timeout: { read: 20m, send: 20m }
+        documentIndex: 4
+
   # The HTTP listeners stay: cert-manager's HTTP-01 challenge needs port 80.
   - it: drops only the redirect route when redirectHttp is false
     set: { workloads.web.ingress.public.redirectHttp: false }

@@ -161,7 +161,8 @@ the entry's objects for `contour`.
 ### `ngf`: NGINX Gateway Fabric
 
 Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`,
-plus a `SnippetsFilter` and a `ClientSettingsPolicy` when `snippets` or `clientSettings` is set.
+plus a `SnippetsFilter`, a `ClientSettingsPolicy`, or a `ProxySettingsPolicy` when `snippets`,
+`clientSettings`, or `timeout` is set.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -170,6 +171,7 @@ plus a `SnippetsFilter` and a `ClientSettingsPolicy` when `snippets` or `clientS
 | `redirectHttp` | `true` | `false` drops the redirect route; the port 80 listeners stay for ACME HTTP-01 |
 | `redirectStatusCode` | `301` | `301` or `308` |
 | `responseHeaders` | none | Map of headers set on every response |
+| `timeout` | none | Proxy read and send timeout to the workload, for example `20m`. Needs NGF 2.6 or later |
 | `snippets` | none | Map of NGINX context to raw NGINX config, for the HTTPS route |
 | `clientSettings` | none | `ClientSettingsPolicy` spec for the HTTPS route: `body` and `keepAlive` |
 | `gateway.create` | `true` | `false` attaches the routes to an existing Gateway, and renders no Gateway or Issuer |
@@ -197,6 +199,12 @@ The HTTPS listeners accept routes only from `namespace`. The HTTP listeners also
 Gateway's namespace, where cert-manager creates the challenge route. Set `namespace` to the namespace
 the app really runs in. A Kustomize patch that rewrites `metadata.namespace` after rendering does not
 change the Gateway's route selector, so the Gateway would reject the routes.
+
+NGF ignores the Gateway API `timeouts` field on HTTPRoute rules, so `timeout` sets NGINX's
+`proxy_read_timeout` and `proxy_send_timeout` through a `ProxySettingsPolicy` instead. NGINX applies
+these between two reads or writes, not to the whole request, so a response that streams data keeps the
+connection open. The value is at most four digits with a unit (`ms`, `s`, `m`, or `h`); `infinity` is
+not allowed. The `ProxySettingsPolicy` CRD comes with NGF 2.6 and later.
 
 #### NGINX policies
 
