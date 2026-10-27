@@ -10,7 +10,7 @@ in. Apps render it from their Kustomize overlays with `helmCharts:`.
 helmCharts:
   - name: syntax-workload
     repo: oci://ghcr.io/syntax-engineering/charts
-    version: 0.3.0
+    version: 0.4.0
     releaseName: <app>
     valuesFile: ../../base/workloads/values.yml
     additionalValuesFiles: [workloads.values.yml]
@@ -39,7 +39,7 @@ Argo CD must run Kustomize with `--enable-helm --load-restrictor LoadRestriction
 
 | Kind | Required | Generates |
 |---|---|---|
-| `Web` | `port`, `replicas`, `healthPath` (only for `probeType: http`, unless `probes: false`) | Deployment, Service, PDB, VPA, ScaledObject when autoscaling |
+| `Web` | `port`, `replicas`, `healthPath` (only for `probeType: http`, unless `probes: false`) | Deployment, Service, PDB, VPA, ScaledObject when autoscaling, and ingress objects when `ingress` is set |
 | `Worker` | `replicas` | Deployment, PDB, VPA, ScaledObject when autoscaling |
 | `CronJob` | `schedule`, `command` | CronJob |
 | `Hook` | `phase` (`PreSync`, `Sync`, `PostSync`), `command` | Job with Argo CD hook annotations |
@@ -73,6 +73,88 @@ Hooks ignore `selectorLabels` because their pods carry no labels. The render fai
 Worker workload's selector would also match another's pods, for example `role: worker` next to
 `role: worker` with `selectorLabels`. The render also fails if a CronJob's pod labels would match a
 Web or Worker selector. CronJobs may share a `role` with each other.
+
+## Ingress
+
+Web workloads can set `ingress`, a map of entries keyed by name. Each entry picks a `backend`, so one
+workload can be public through NGINX Gateway Fabric and private through Tailscale at the same time.
+Objects are named `<workload fullname>-<entry>`, for example `acme-web-public`. Set `enabled: false`
+on an entry to drop it.
+
+```yaml
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [api.acme.example.com]
+      grpc:
+        backend: contour
+        hostnames: [grpc.acme.example.com]
+        protocol: h2c
+        timeout: 20m
+      tailnet:
+        backend: tailscale
+        hostname: acme-sprint-rails
+```
+
+Every backend routes all paths to the workload's Service on its `port`. Every entry can set
+`annotations`, which are copied onto the route, HTTPProxy, or Ingress.
+
+### `ngf`: NGINX Gateway Fabric
+
+Generates a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `hostnames` | required | Public hostnames; a leading `*.` is allowed |
+| `tls.clusterIssuer` | `letsencrypt-prod` | cert-manager ClusterIssuer, set as an annotation on the Gateway |
+| `tls.secretName` | `<name>-tls` | Certificate Secret, in the Gateway's namespace |
+| `redirectHttp` | `true` | `false` drops the redirect route; the port 80 listeners stay for ACME HTTP-01 |
+| `redirectStatusCode` | `301` | `301` or `308` |
+| `responseHeaders` | none | Map of headers set on every response |
+| `gateway.create` | `true` | `false` attaches the routes to an existing Gateway instead |
+| `gateway.name` | `<name>` | Gateway name |
+| `gateway.namespace` | `nginx-gateway` | Gateway namespace |
+| `gateway.className` | `nginx` | GatewayClass |
+| `gateway.annotations` | none | Extra Gateway annotations, for example `gateway.nginx.org/nginxproxy` |
+
+The Gateway gets an HTTP listener (`http-<host>`) and an HTTPS listener (`https-<host>`) for each
+hostname. In the listener name, `.` becomes `-` and `*` becomes `wildcard`. A shared Gateway used with
+`gateway.create: false` must name its listeners the same way.
+
+The listeners accept routes only from `namespace`. Set `namespace` to the namespace the app really
+runs in. A Kustomize patch that rewrites `metadata.namespace` after rendering does not change the
+Gateway's route selector, so the Gateway would reject the routes.
+
+### `contour`: Contour
+
+Generates a cert-manager `Certificate` for all hostnames, plus one `HTTPProxy` per hostname. With more
+than one hostname, each HTTPProxy name ends in `-<host>`. The Certificate carries the label
+`cert-manager.io/solver: contour`, so an issuer can pick its Contour HTTP-01 solver.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `hostnames` | required | Public hostnames |
+| `tls.clusterIssuer` | `letsencrypt-prod` | cert-manager ClusterIssuer |
+| `tls.secretName` | `<name>-tls` | Certificate Secret, in the app namespace |
+| `protocol` | none | Upstream protocol: `h2c` for plaintext gRPC, or `h2` or `tls` |
+| `timeout` | none | Response and idle timeout, for example `20m` |
+| `responseHeaders` | none | Map of headers set on every response |
+| `className` | none | `spec.ingressClassName`, when Contour runs with an ingress class |
+
+### `tailscale`: Tailscale
+
+Generates an `Ingress` with `ingressClassName: tailscale`. The Tailscale operator gives it a tailnet
+address and a certificate.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `hostname` | required | Tailnet machine name, for example `acme-sprint-rails` |
+
+Use `annotations` for operator options, such as `tailscale.com/funnel: "true"`.
 
 ## Defaults
 

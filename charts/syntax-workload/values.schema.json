@@ -127,6 +127,83 @@
       ]
     },
     "offOrInt": { "oneOf": [{ "const": false }, { "type": "integer", "minimum": 0 }] },
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "ingress": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+      "additionalProperties": { "$ref": "#/$defs/ingressEntry" }
+    },
+    "ingressEntry": {
+      "type": "object",
+      "required": ["backend"],
+      "additionalProperties": false,
+      "properties": {
+        "backend": { "enum": ["ngf", "contour", "tailscale"] },
+        "enabled": { "type": "boolean" },
+        "annotations": { "$ref": "#/$defs/stringMap" },
+        "hostnames": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(\\*\\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$" }
+        },
+        "hostname": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clusterIssuer": { "type": "string", "minLength": 1 },
+            "secretName": { "type": "string", "minLength": 1 }
+          }
+        },
+        "responseHeaders": { "$ref": "#/$defs/stringMap" },
+        "redirectHttp": { "type": "boolean" },
+        "redirectStatusCode": { "enum": [301, 308] },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": { "type": "boolean" },
+            "name": { "type": "string", "minLength": 1 },
+            "namespace": { "type": "string", "minLength": 1 },
+            "className": { "type": "string", "minLength": 1 },
+            "annotations": { "$ref": "#/$defs/stringMap" }
+          }
+        },
+        "className": { "type": "string", "minLength": 1 },
+        "protocol": { "enum": ["h2", "h2c", "tls"] },
+        "timeout": { "type": "string", "pattern": "^(infinity|[0-9]+(ms|s|m|h))$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "backend": { "const": "ngf" } }, "required": ["backend"] },
+          "then": {
+            "required": ["hostnames"],
+            "not": { "anyOf": [{ "required": ["hostname"] }, { "required": ["className"] }, { "required": ["protocol"] }, { "required": ["timeout"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "backend": { "const": "contour" } }, "required": ["backend"] },
+          "then": {
+            "required": ["hostnames"],
+            "not": { "anyOf": [{ "required": ["hostname"] }, { "required": ["gateway"] }, { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "backend": { "const": "tailscale" } }, "required": ["backend"] },
+          "then": {
+            "required": ["hostname"],
+            "not": {
+              "anyOf": [
+                { "required": ["hostnames"] }, { "required": ["tls"] }, { "required": ["responseHeaders"] }, { "required": ["gateway"] },
+                { "required": ["redirectHttp"] }, { "required": ["redirectStatusCode"] }, { "required": ["className"] },
+                { "required": ["protocol"] }, { "required": ["timeout"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
     "workload": {
       "type": "object",
       "required": ["kind"],
@@ -200,6 +277,7 @@
         "probes": { "$ref": "#/$defs/probes" },
         "serviceName": { "type": "string", "minLength": 1 },
         "serviceType": { "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "ingress": { "$ref": "#/$defs/ingress" },
         "schedule": { "type": "string", "minLength": 1 },
         "timeZone": { "type": "string" },
         "concurrencyPolicy": { "oneOf": [{ "const": false }, { "enum": ["Allow", "Forbid", "Replace"] }] },
@@ -252,6 +330,10 @@
         {
           "if": { "properties": { "kind": { "const": "Hook" } } },
           "then": { "required": ["phase", "command"] }
+        },
+        {
+          "if": { "properties": { "kind": { "enum": ["Worker", "CronJob", "Hook"] } }, "required": ["kind"] },
+          "then": { "not": { "required": ["ingress"] } }
         },
         {
           "if": {

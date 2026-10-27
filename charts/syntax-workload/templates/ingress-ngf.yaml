@@ -1,0 +1,101 @@
+{{- range $name, $w := .Values.workloads }}
+{{- if and (eq $w.kind "Web") (ne $w.enabled false) }}
+{{- range $key, $in := $w.ingress }}
+{{- if and (eq $in.backend "ngf") (ne $in.enabled false) }}
+{{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in }}
+{{- $gw := $in.gateway | default dict }}
+{{- $gwName := $gw.name | default (include "sw.ingressName" $c) }}
+{{- $gwNamespace := $gw.namespace | default "nginx-gateway" }}
+{{- if ne $gw.create false }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ $gwName }}
+  namespace: {{ $gwNamespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+  annotations: {{- toYaml (merge (dict "cert-manager.io/cluster-issuer" (include "sw.ingressIssuer" $c)) ($gw.annotations | default dict)) | nindent 4 }}
+spec:
+  gatewayClassName: {{ $gw.className | default "nginx" }}
+  listeners:
+    {{- range $in.hostnames }}
+    - name: http-{{ include "sw.hostLabel" . }}
+      hostname: {{ . | quote }}
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector: { matchLabels: { kubernetes.io/metadata.name: {{ $.Values.namespace }} } }
+    - name: https-{{ include "sw.hostLabel" . }}
+      hostname: {{ . | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - { group: '', kind: Secret, name: {{ include "sw.ingressTlsSecret" $c }} }
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector: { matchLabels: { kubernetes.io/metadata.name: {{ $.Values.namespace }} } }
+    {{- end }}
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "sw.ingressName" $c }}
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+  {{- with $in.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- range $in.hostnames }}
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ $gwName }}, namespace: {{ $gwNamespace }}, sectionName: https-{{ include "sw.hostLabel" . }} }
+    {{- end }}
+  hostnames: {{- toYaml $in.hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      {{- with $in.responseHeaders }}
+      filters:
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              {{- range $header, $value := . }}
+              - { name: {{ $header }}, value: {{ $value | quote }} }
+              {{- end }}
+      {{- end }}
+      backendRefs:
+        - { group: '', kind: Service, name: {{ include "sw.ingressService" $c }}, port: {{ $w.port }} }
+{{- if ne $in.redirectHttp false }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "sw.ingressName" $c }}-redirect
+  namespace: {{ $.Values.namespace }}
+  labels: {{- include "sw.selector" $c | nindent 4 }}
+  {{- with $in.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- range $in.hostnames }}
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ $gwName }}, namespace: {{ $gwNamespace }}, sectionName: http-{{ include "sw.hostLabel" . }} }
+    {{- end }}
+  hostnames: {{- toYaml $in.hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      filters:
+        - type: RequestRedirect
+          requestRedirect: { scheme: https, statusCode: {{ $in.redirectStatusCode | default 301 }} }
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

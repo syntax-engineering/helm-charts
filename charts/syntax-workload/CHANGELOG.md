@@ -2,6 +2,19 @@
 
 Each entry says what changes in rendered output for existing apps.
 
+## [0.4.0] - 2026-10-27
+
+No rendered-output change for existing values.
+
+Added (all optional):
+- `ingress` on Web workloads: a map of named entries, each with a `backend`.
+  - `ngf`: a Gateway with HTTP and HTTPS listeners per hostname (cert-manager issues the certificate
+    through the Gateway annotation), an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect route.
+    `gateway.create: false` attaches the routes to an existing Gateway.
+  - `contour`: a cert-manager `Certificate` and one `HTTPProxy` per hostname, with optional
+    `protocol`, `timeout`, and `className`.
+  - `tailscale`: an `Ingress` with `ingressClassName: tailscale` on the workload's Service port.
+
 ## [0.3.0] - 2026-10-07
 
 No rendered-output change for existing values.

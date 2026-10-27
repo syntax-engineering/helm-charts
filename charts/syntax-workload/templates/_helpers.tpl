@@ -183,3 +183,26 @@ ports:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/* Ingress helpers take the workload context plus "key" (entry name) and "in" (entry). */}}
+
+{{- define "sw.ingressName" -}}
+{{- printf "%s-%s" (include "sw.fullname" .) .key -}}
+{{- end }}
+
+{{- define "sw.ingressService" -}}
+{{- .w.serviceName | default (include "sw.fullname" .) -}}
+{{- end }}
+
+{{- define "sw.ingressTlsSecret" -}}
+{{- dig "tls" "secretName" (printf "%s-tls" (include "sw.ingressName" .)) .in -}}
+{{- end }}
+
+{{- define "sw.ingressIssuer" -}}
+{{- dig "tls" "clusterIssuer" "letsencrypt-prod" .in -}}
+{{- end }}
+
+{{/* A hostname as a DNS label: "*.a.example.com" -> "wildcard-a-example-com". */}}
+{{- define "sw.hostLabel" -}}
+{{- . | replace "*" "wildcard" | replace "." "-" -}}
+{{- end }}
