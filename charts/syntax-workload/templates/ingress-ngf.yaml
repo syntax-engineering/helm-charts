@@ -1,34 +1,36 @@
 {{- include "sw.assertUniqueIngressNames" (dict "root" . "backend" "ngf") }}
 {{- include "sw.assertUniqueGateways" . }}
+{{- $emitted := dict }}
 {{- range $name, $w := .Values.workloads }}
 {{- if and (eq $w.kind "Web") (ne $w.enabled false) }}
 {{- range $key, $in := $w.ingress }}
 {{- if and (eq $in.backend "ngf") (ne $in.enabled false) }}
 {{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in }}
-{{- $gw := $in.gateway | default dict }}
-{{- $gwName := include "sw.ngfGatewayName" $c }}
-{{- $gwNamespace := include "sw.ngfGatewayNamespace" $c }}
-{{- if ne $gw.create false }}
-{{- $issuer := dict "cert-manager.io/cluster-issuer" (dig "tls" "clusterIssuer" "" $in) }}
-{{- if not (dig "tls" "clusterIssuer" "" $in) }}
-{{- $issuer = dict "cert-manager.io/issuer" (printf "%s-acme" $gwName) }}
+{{- $gwKey := $in.gateway | default "default" }}
+{{- $gw := include "sw.ngfGateway" (dict "root" $ "entry" (printf "%s/%s" $name $key) "key" $gwKey) | fromYaml }}
+{{- if and $gw.create (not (hasKey $emitted $gwKey)) }}
+{{- $_ := set $emitted $gwKey true }}
+{{- $listenerHosts := include "sw.ngfGatewayHostnames" (dict "root" $ "key" $gwKey) | fromYamlArray }}
+{{- $issuer := dict "cert-manager.io/cluster-issuer" $gw.clusterIssuer }}
+{{- if not $gw.clusterIssuer }}
+{{- $issuer = dict "cert-manager.io/issuer" (printf "%s-acme" $gw.name) }}
 {{- /* The solver attaches the challenge route to this Gateway; without parentRefs it attaches nowhere. */}}
-{{- $parent := dict "group" "gateway.networking.k8s.io" "kind" "Gateway" "name" $gwName "namespace" $gwNamespace }}
+{{- $parent := dict "group" "gateway.networking.k8s.io" "kind" "Gateway" "name" $gw.name "namespace" $gw.namespace }}
 ---
-{{ include "sw.acmeIssuer" (dict "c" $c "name" (printf "%s-acme" $gwName) "namespace" $gwNamespace "solver" (dict "http01" (dict "gatewayHTTPRoute" (dict "parentRefs" (list $parent))))) }}
+{{ include "sw.acmeIssuer" (dict "c" $c "labels" (include "sw.appLabels" $ | fromYaml) "acme" $gw.acme "name" (printf "%s-acme" $gw.name) "namespace" $gw.namespace "solver" (dict "http01" (dict "gatewayHTTPRoute" (dict "parentRefs" (list $parent))))) }}
 {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: {{ $gwName }}
-  namespace: {{ $gwNamespace }}
-  labels: {{- include "sw.selector" $c | nindent 4 }}
-  annotations: {{- toYaml (merge $issuer ($gw.annotations | default dict)) | nindent 4 }}
+  name: {{ $gw.name }}
+  namespace: {{ $gw.namespace }}
+  labels: {{- include "sw.appLabels" $ | nindent 4 }}
+  annotations: {{- toYaml (merge $issuer $gw.annotations) | nindent 4 }}
 spec:
-  gatewayClassName: {{ $gw.className | default "nginx" }}
+  gatewayClassName: {{ $gw.className }}
   listeners:
-    {{- range $in.hostnames }}
+    {{- range $listenerHosts }}
     {{- /* cert-manager creates the challenge route in the Gateway's namespace, so port 80 accepts routes from there too. */}}
     - name: http-{{ include "sw.hostLabel" . }}
       hostname: {{ . | quote }}
@@ -37,7 +39,7 @@ spec:
       allowedRoutes:
         namespaces:
           from: Selector
-          selector: { matchExpressions: [{ key: kubernetes.io/metadata.name, operator: In, values: [{{ $.Values.namespace }}, {{ $gwNamespace }}] }] }
+          selector: { matchExpressions: [{ key: kubernetes.io/metadata.name, operator: In, values: [{{ $.Values.namespace }}, {{ $gw.namespace }}] }] }
     - name: https-{{ include "sw.hostLabel" . }}
       hostname: {{ . | quote }}
       port: 443
@@ -45,12 +47,25 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - { group: '', kind: Secret, name: {{ include "sw.ingressTlsSecret" $c }} }
+          - { group: '', kind: Secret, name: {{ $gw.secretName }} }
       allowedRoutes:
         namespaces:
           from: Selector
           selector: { matchLabels: { kubernetes.io/metadata.name: {{ $.Values.namespace }} } }
     {{- end }}
+{{- end }}
+{{- /* A chart-created Gateway has a listener pair per hostname; an external one has the two named in listeners. */}}
+{{- $httpsRefs := list }}
+{{- $httpRefs := list }}
+{{- $parentBase := dict "group" "gateway.networking.k8s.io" "kind" "Gateway" "name" $gw.name "namespace" $gw.namespace }}
+{{- if $gw.create }}
+{{- range $in.hostnames }}
+{{- $httpsRefs = append $httpsRefs (merge (dict "sectionName" (printf "https-%s" (include "sw.hostLabel" .))) $parentBase) }}
+{{- $httpRefs = append $httpRefs (merge (dict "sectionName" (printf "http-%s" (include "sw.hostLabel" .))) $parentBase) }}
+{{- end }}
+{{- else }}
+{{- $httpsRefs = list (merge (dict "sectionName" $gw.listeners.https) $parentBase) }}
+{{- $httpRefs = list (merge (dict "sectionName" $gw.listeners.http) $parentBase) }}
 {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -63,17 +78,19 @@ metadata:
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  parentRefs:
-    {{- range $in.hostnames }}
-    - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ $gwName }}, namespace: {{ $gwNamespace }}, sectionName: https-{{ include "sw.hostLabel" . }} }
-    {{- end }}
+  parentRefs: {{- toYaml $httpsRefs | nindent 4 }}
   hostnames: {{- toYaml $in.hostnames | nindent 4 }}
   rules:
-    {{- range $rule := prepend ($in.paths | default list) (dict "prefix" "/" "service" (include "sw.ingressService" $c) "port" $w.port) }}
+    {{- range $rule := prepend ($in.paths | default list) (dict "prefix" "/") }}
     - matches:
-        - path: { type: PathPrefix, value: {{ $rule.prefix }} }
-      {{- if or $in.responseHeaders $in.snippets }}
+        - path: { type: {{ $rule.match | default "PathPrefix" }}, value: {{ $rule.prefix }} }
+      {{- if or $rule.rewrite $in.responseHeaders $in.snippets }}
       filters:
+        {{- with $rule.rewrite }}
+        - type: URLRewrite
+          urlRewrite:
+            path: { type: ReplaceFullPath, replaceFullPath: {{ .fullPath | quote }} }
+        {{- end }}
         {{- with $in.responseHeaders }}
         - type: ResponseHeaderModifier
           responseHeaderModifier:
@@ -88,7 +105,7 @@ spec:
         {{- end }}
       {{- end }}
       backendRefs:
-        - { group: '', kind: Service, name: {{ $rule.service }}, port: {{ $rule.port }} }
+        - { group: '', kind: Service, name: {{ $rule.service | default (include "sw.ingressService" $c) }}, port: {{ $rule.port | default $w.port }} }
     {{- end }}
 {{- if ne $in.redirectHttp false }}
 ---
@@ -102,10 +119,7 @@ metadata:
   annotations: {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  parentRefs:
-    {{- range $in.hostnames }}
-    - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ $gwName }}, namespace: {{ $gwNamespace }}, sectionName: http-{{ include "sw.hostLabel" . }} }
-    {{- end }}
+  parentRefs: {{- toYaml $httpRefs | nindent 4 }}
   hostnames: {{- toYaml $in.hostnames | nindent 4 }}
   rules:
     - matches:

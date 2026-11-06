@@ -240,3 +240,124 @@ tests:
     values: [schema/bad/ingress-ngf-bad-timeout.yaml]
     asserts:
       - failedTemplate: { errorPattern: '/ingress/public/timeout.: .infinity. does not match pattern' }
+
+  - it: accepts Exact match, a full-path rewrite, and a path rule without service and port
+    values: [schema/good/web-with-path-rules.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects a path match other than Exact
+    values: [schema/bad/ingress-path-bad-match.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'paths/0/match.: value must be .Exact.' }
+
+  - it: rejects a full-path rewrite that is not absolute
+    values: [schema/bad/ingress-path-rewrite-relative.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'rewrite/fullPath.: .metrics. does not match pattern' }
+
+  - it: rejects an unknown field in rewrite
+    values: [schema/bad/ingress-path-rewrite-unknown-field.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'additional propert.* .prefix. not allowed' }
+
+  # A service without its port (or the reverse) would silently mix the workload's port with another Service.
+  - it: rejects a path rule with a service but no port
+    values: [schema/bad/ingress-path-service-without-port.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: "properties 'port' required, if 'service' exists" }
+
+  - it: rejects Exact match on a Contour entry
+    values: [schema/bad/ingress-contour-path-exact.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'paths/0.: .not. failed' }
+
+  - it: rejects a rewrite on a Contour entry
+    values: [schema/bad/ingress-contour-path-rewrite.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'paths/0.: .not. failed' }
+
+  - it: accepts declared, implicit, internal, and external Gateways with ngf entries that name them
+    values: [schema/good/web-with-gateways.yaml]
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: rejects the removed gateway object on an NGF entry
+    values: [schema/bad/ingress-ngf-gateway-object.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'ingress/public/gateway.: got object, want string' }
+
+  - it: rejects tls on an NGF entry (it moved to ingresses.ngf.gateways)
+    values: [schema/bad/ingress-ngf-entry-tls.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'ingress/public.: .not. failed' }
+
+  - it: rejects a Gateway key on a Contour entry
+    values: [schema/bad/ingress-contour-with-gateway-key.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'ingress/public.: .not. failed' }
+
+  - it: rejects a Gateway key on a Tailscale entry
+    values: [schema/bad/ingress-tailscale-with-gateway-key.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'ingress/tailnet.: .not. failed' }
+
+  - it: rejects an ingresses backend other than ngf
+    values: [schema/bad/ingresses-unknown-backend.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingresses.: additional properties .contour. not allowed' }
+
+  - it: rejects an unknown key under ingresses.ngf
+    values: [schema/bad/ingresses-ngf-unknown-key.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: '/ingresses/ngf.: additional properties .listeners. not allowed' }
+
+  - it: rejects an unknown Gateway field
+    values: [schema/bad/ingresses-gateway-unknown-field.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/default.: additional properties .hostnames. not allowed' }
+
+  - it: rejects a Gateway key that is not a DNS label
+    values: [schema/bad/ingresses-gateway-bad-key.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'invalid propertyName .Bad_Key.' }
+
+  - it: rejects tls.clusterIssuer together with tls.acme on a Gateway
+    values: [schema/bad/ingresses-gateway-issuer-and-acme.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/default/tls.: .not. failed' }
+
+  - it: rejects an external Gateway without listeners
+    values: [schema/bad/ingresses-gateway-external-without-listeners.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/shared.: missing property .listeners.' }
+
+  - it: rejects an external Gateway without a name
+    values: [schema/bad/ingresses-gateway-external-without-name.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/shared.: missing property .name.' }
+
+  - it: rejects an external Gateway without a namespace
+    values: [schema/bad/ingresses-gateway-external-without-namespace.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/shared.: missing property .namespace.' }
+
+  - it: rejects tls on an external Gateway
+    values: [schema/bad/ingresses-gateway-external-with-tls.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/shared.: .not. failed' }
+
+  - it: rejects className on an external Gateway
+    values: [schema/bad/ingresses-gateway-external-with-class-name.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/shared.: .not. failed' }
+
+  - it: rejects annotations on an external Gateway
+    values: [schema/bad/ingresses-gateway-external-with-annotations.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/shared.: .not. failed' }
+
+  - it: rejects listeners on a Gateway the chart creates
+    values: [schema/bad/ingresses-gateway-created-with-listeners.yaml]
+    asserts:
+      - failedTemplate: { errorPattern: 'gateways/default.: .not. failed' }

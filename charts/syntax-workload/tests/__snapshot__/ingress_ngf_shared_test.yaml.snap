@@ -1,0 +1,276 @@
+matches the committed golden output:
+  1: |
+    apiVersion: cert-manager.io/v1
+    kind: Issuer
+    metadata:
+      labels:
+        app: acme
+      name: acme-nginx-gateway-acme
+      namespace: nginx-gateway
+    spec:
+      acme:
+        email: devops@syntaxdata.com
+        privateKeySecretRef:
+          name: acme-nginx-gateway-acme-account
+        server: https://acme-v02.api.letsencrypt.org/directory
+        solvers:
+          - http01:
+              gatewayHTTPRoute:
+                parentRefs:
+                  - group: gateway.networking.k8s.io
+                    kind: Gateway
+                    name: acme-nginx-gateway
+                    namespace: nginx-gateway
+  2: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata:
+      annotations:
+        cert-manager.io/issuer: acme-nginx-gateway-acme
+      labels:
+        app: acme
+      name: acme-nginx-gateway
+      namespace: nginx-gateway
+    spec:
+      gatewayClassName: nginx
+      listeners:
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchExpressions:
+                  - key: kubernetes.io/metadata.name
+                    operator: In
+                    values:
+                      - acme-env
+                      - nginx-gateway
+          hostname: mcp.acme.example.com
+          name: http-mcp-acme-example-com
+          port: 80
+          protocol: HTTP
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchLabels:
+                  kubernetes.io/metadata.name: acme-env
+          hostname: mcp.acme.example.com
+          name: https-mcp-acme-example-com
+          port: 443
+          protocol: HTTPS
+          tls:
+            certificateRefs:
+              - group: ""
+                kind: Secret
+                name: acme-tls
+            mode: Terminate
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchExpressions:
+                  - key: kubernetes.io/metadata.name
+                    operator: In
+                    values:
+                      - acme-env
+                      - nginx-gateway
+          hostname: api.acme.example.com
+          name: http-api-acme-example-com
+          port: 80
+          protocol: HTTP
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchLabels:
+                  kubernetes.io/metadata.name: acme-env
+          hostname: api.acme.example.com
+          name: https-api-acme-example-com
+          port: 443
+          protocol: HTTPS
+          tls:
+            certificateRefs:
+              - group: ""
+                kind: Secret
+                name: acme-tls
+            mode: Terminate
+  3: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: mcp
+      name: acme-mcp-public
+      namespace: acme-env
+    spec:
+      hostnames:
+        - mcp.acme.example.com
+        - api.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: https-mcp-acme-example-com
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: https-api-acme-example-com
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-mcp
+              port: 9393
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  4: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: mcp
+      name: acme-mcp-public-redirect
+      namespace: acme-env
+    spec:
+      hostnames:
+        - mcp.acme.example.com
+        - api.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: http-mcp-acme-example-com
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: http-api-acme-example-com
+      rules:
+        - filters:
+            - requestRedirect:
+                scheme: https
+                statusCode: 301
+              type: RequestRedirect
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  5: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: other
+      name: acme-other-public
+      namespace: acme-env
+    spec:
+      hostnames:
+        - other.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: elsewhere-gateway
+          namespace: edge-gateways
+          sectionName: https
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-other
+              port: 9000
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  6: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: other
+      name: acme-other-public-redirect
+      namespace: acme-env
+    spec:
+      hostnames:
+        - other.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: elsewhere-gateway
+          namespace: edge-gateways
+          sectionName: http
+      rules:
+        - filters:
+            - requestRedirect:
+                scheme: https
+                statusCode: 301
+              type: RequestRedirect
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  7: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: web
+      name: acme-web-public
+      namespace: acme-env
+    spec:
+      hostnames:
+        - api.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: https-api-acme-example-com
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-web
+              port: 8080
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  8: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: web
+      name: acme-web-public-redirect
+      namespace: acme-env
+    spec:
+      hostnames:
+        - api.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: http-api-acme-example-com
+      rules:
+        - filters:
+            - requestRedirect:
+                scheme: https
+                statusCode: 301
+              type: RequestRedirect
+          matches:
+            - path:
+                type: PathPrefix
+                value: /

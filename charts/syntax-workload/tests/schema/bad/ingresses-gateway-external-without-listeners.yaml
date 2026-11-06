@@ -1,0 +1,15 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+ingresses:
+  ngf:
+    gateways:
+      shared: { create: false, name: platform-gateway, namespace: nginx-gateway }
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: 2
+    ingress:
+      public: { backend: ngf, hostnames: [api.acme.example.com], gateway: shared }

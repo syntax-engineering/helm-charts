@@ -10,7 +10,7 @@ in. Apps render it from their Kustomize overlays with `helmCharts:`.
 helmCharts:
   - name: syntax-workload
     repo: oci://ghcr.io/syntax-engineering/charts
-    version: 0.4.0
+    version: 0.5.0
     releaseName: <app>
     valuesFile: ../../base/workloads/values.yml
     additionalValuesFiles: [workloads.values.yml]
@@ -107,7 +107,8 @@ Every backend routes all paths to the workload's Service on its `port`. Every en
 ### Path rules
 
 `ngf` and `contour` entries can send extra path prefixes to another Service with `paths`. Each rule
-needs a `prefix`, a `service`, and a `port`. Everything else still goes to the workload's Service.
+needs a `prefix`. `service` and `port` go together; leave both out to use the workload's own Service and
+port. Everything else still goes to the workload's Service.
 
 ```yaml
     ingress:
@@ -117,7 +118,13 @@ needs a `prefix`, a `service`, and a `port`. Everything else still goes to the w
         paths:
           - { prefix: /assets, service: acme-assets-svc, port: 80 }
           - { prefix: /packs, service: acme-assets-svc, port: 80 }
+          - { prefix: /metrics, match: Exact, rewrite: { fullPath: / } }
 ```
+
+`ngf` rules can also set `match: Exact`, so `prefix` must match the whole path, and
+`rewrite: { fullPath: <path> }`, which replaces the request path before it reaches the Service (a
+`URLRewrite` filter with `ReplaceFullPath`). The example above serves `/metrics` as `/` on the
+workload's Service. `contour` entries do not support `match` or `rewrite`.
 
 The longest matching prefix wins, so the order of the rules does not matter. Each rule gets the entry's
 `responseHeaders`, and on `contour` its `timeout`. `protocol` applies only to the workload's Service.
@@ -131,7 +138,7 @@ depends on the backend:
 
 | Backend | Named after the entry | Effect of renaming the entry |
 |---|---|---|
-| `ngf` | `HTTPRoute`s | The routes are replaced. The Gateway, Issuer, and Secret are named after the app, so the load balancer and certificate stay |
+| `ngf` | `HTTPRoute`s | The routes are replaced. The Gateway, Issuer, and Secret are named after the Gateway key, not the entry, so the load balancer and certificate stay |
 | `contour` | Issuer, `Certificate`, Secret, `HTTPProxy` | cert-manager issues a new certificate. This uses Let's Encrypt quota, and HTTPS may fail briefly while it issues |
 | `tailscale` | `Ingress` | The operator creates a new tailnet device. While the old device still exists, the new one may get the name `<hostname>-1` |
 
@@ -142,9 +149,10 @@ fails if two entries with the same backend would use the same name.
 ### TLS certificates
 
 Backends that terminate TLS with cert-manager (`ngf` and `contour`) issue certificates the same way. By
-default each entry generates its own ACME `Issuer`, whose HTTP-01 solver the backend itself serves. This
-works without any issuer in the app repo or on the cluster. Set `tls.clusterIssuer` to use a
-ClusterIssuer instead; that issuer then needs a solver the backend can serve.
+default a generated ACME `Issuer` solves HTTP-01 through the backend itself. This works without any
+issuer in the app repo or on the cluster. Set `tls.clusterIssuer` to use a ClusterIssuer instead; that
+issuer then needs a solver the backend can serve. `contour` entries set `tls` on the entry. `ngf`
+entries have no `tls`: it belongs to the Gateway, under `ingresses.ngf.gateways.<key>.tls`.
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -160,40 +168,97 @@ the entry's objects for `contour`.
 
 ### `ngf`: NGINX Gateway Fabric
 
-Generates an ACME `Issuer`, a Gateway, an HTTPS `HTTPRoute`, and an HTTP-to-HTTPS redirect `HTTPRoute`,
-plus a `SnippetsFilter`, a `ClientSettingsPolicy`, or a `ProxySettingsPolicy` when `snippets`,
-`clientSettings`, or `timeout` is set.
+An `ngf` entry renders an HTTPS `HTTPRoute` and an HTTP-to-HTTPS redirect `HTTPRoute`, plus a
+`SnippetsFilter`, a `ClientSettingsPolicy`, or a `ProxySettingsPolicy` when `snippets`,
+`clientSettings`, or `timeout` is set. The Gateway the routes attach to is set up one level up, under
+`ingresses.ngf.gateways`, and the entry picks one by key.
 
 | Field | Default | Meaning |
 |---|---|---|
 | `hostnames` | required | Public hostnames; a leading `*.` is allowed |
-| `tls.secretName` | `<app>-tls` | Certificate Secret, in the Gateway's namespace |
+| `gateway` | `default` | Key of the Gateway under `ingresses.ngf.gateways` |
 | `redirectHttp` | `true` | `false` drops the redirect route; the port 80 listeners stay for ACME HTTP-01 |
 | `redirectStatusCode` | `301` | `301` or `308` |
 | `responseHeaders` | none | Map of headers set on every response |
 | `timeout` | none | Proxy read and send timeout to the workload, for example `20m`. Needs NGF 2.6 or later |
 | `snippets` | none | Map of NGINX context to raw NGINX config, for the HTTPS route |
 | `clientSettings` | none | `ClientSettingsPolicy` spec for the HTTPS route: `body` and `keepAlive` |
-| `gateway.create` | `true` | `false` attaches the routes to an existing Gateway, and renders no Gateway or Issuer |
-| `gateway.name` | `<app>-nginx-gateway` | Gateway name |
-| `gateway.namespace` | `nginx-gateway` | Gateway namespace |
-| `gateway.className` | `nginx` | GatewayClass |
-| `gateway.annotations` | none | Extra Gateway annotations, for example `gateway.nginx.org/nginxproxy` |
 
-The Gateway and Secret defaults match the names our apps already use. NGF creates a load balancer for
-each Gateway, so keeping the name keeps the public IP when an app moves its Gateway onto the chart. The
-render fails if two entries would create the same Gateway or write the same Secret; set `gateway.name`
-or `tls.secretName` on one of them.
+`ngf` entries take no `tls`, and `gateway` is a key, not an object. Gateway settings and TLS belong to
+the Gateway, because several entries, on several workloads, can share one.
+
+#### Gateways
+
+`ingresses` is a top-level key, keyed by backend. Only `ngf` is allowed, and it only has `gateways`, a
+map keyed by Gateway key.
+
+```yaml
+ingresses:
+  ngf:
+    gateways:
+      default:                 # implicit: used when it is not declared
+        annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
+        tls:
+          acme: { email: ops@acme.example.com }
+      shared:                  # a Gateway outside the release
+        create: false
+        name: platform-gateway
+        namespace: nginx-gateway
+        listeners: { http: http, https: https }
+workloads:
+  web:
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [api.acme.example.com]      # gateway: default
+      partner:
+        backend: ngf
+        gateway: shared
+        hostnames: [partner.acme.example.com]
+```
+
+| Field | Default | Applies to | Meaning |
+|---|---|---|---|
+| `name` | `<app>-nginx-gateway` for `default`, otherwise `<app>-<key>-gateway` | all | Gateway name |
+| `namespace` | `nginx-gateway` | all | Gateway namespace |
+| `className` | `nginx` | created | GatewayClass |
+| `annotations` | none | created | Extra Gateway annotations, for example `gateway.nginx.org/nginxproxy` |
+| `tls.secretName` | `<app>-tls` for `default`, otherwise `<app>-<key>-tls` | created | Certificate Secret, in the Gateway's namespace |
+| `tls.clusterIssuer` | none | created | Use this ClusterIssuer instead of a generated Issuer |
+| `tls.acme.email`, `.server`, `.waitInsteadOfSelfCheck` | see [TLS certificates](#tls-certificates) | created | Settings of the generated Issuer |
+| `create` | `true` | all | `false` means the Gateway exists outside the release |
+| `listeners.http`, `listeners.https` | none, required with `create: false` | external | Names of the existing Gateway's HTTP and HTTPS listeners |
+
+The `default` Gateway needs no declaration. An entry that names `default`, or no Gateway, gets one with
+the defaults above; declare `default` only to change them. Any other key must be declared, or the
+render fails.
+
+The `default` names match the ones apps already use. NGF creates a load balancer for each Gateway, so
+keeping the name keeps the public IP when an app moves its Gateway onto the chart.
+
+A Gateway the chart creates (`create: true`) and its generated Issuer carry the `app` label only, no
+`role`, since several workloads can share them. The chart renders it once, however many entries name it, with one
+generated Issuer (unless `tls.clusterIssuer` is set) and one certificate Secret. It gets an HTTP
+listener (`http-<host>`) and an HTTPS listener (`https-<host>`) for each hostname. The hostnames are
+those of every enabled `ngf` entry that names it, across all workloads of the release, in workload and
+entry order, without repeats. In the listener name, `.` becomes `-` and `*` becomes `wildcard`. All the
+HTTPS listeners use the Gateway's Secret. Each route attaches to the listeners of its own hostnames.
+
+A Gateway with `create: false` renders nothing: no Gateway, Issuer, or Secret. Its TLS is handled
+outside the release. The HTTPS route attaches to `listeners.https` and the redirect route to
+`listeners.http`, through `parentRefs.sectionName`. `tls`, `className`, and `annotations` are not
+allowed on it, and `listeners` is not allowed on a created Gateway.
+
+A declared Gateway that no enabled entry names renders nothing, so a base values file can declare
+Gateways that only some overlays use. The render fails if an entry names an undeclared key, if two
+created Gateways in use would render the same namespace and name (set `name` on one), or if they would
+write the same Secret in one namespace (set `tls.secretName` on one).
 
 cert-manager issues the certificate from the Gateway's `cert-manager.io/issuer` annotation (or
 `cert-manager.io/cluster-issuer` with `tls.clusterIssuer`). The generated Issuer lives next to the
-Gateway, and its HTTP-01 solver attaches the challenge route to that Gateway through `parentRefs`. A
-ClusterIssuer's `gatewayHTTPRoute` solver needs the same `parentRefs`, or the challenge route attaches
-to nothing.
-
-The Gateway gets an HTTP listener (`http-<host>`) and an HTTPS listener (`https-<host>`) for each
-hostname. In the listener name, `.` becomes `-` and `*` becomes `wildcard`. A shared Gateway used with
-`gateway.create: false` must name its listeners the same way.
+Gateway, is named `<Gateway name>-acme`, and its HTTP-01 solver attaches the challenge route to that
+Gateway through `parentRefs`. A ClusterIssuer's `gatewayHTTPRoute` solver needs the same `parentRefs`,
+or the challenge route attaches to nothing.
 
 The HTTPS listeners accept routes only from `namespace`. The HTTP listeners also accept routes from the
 Gateway's namespace, where cert-manager creates the challenge route. Set `namespace` to the namespace
@@ -204,12 +269,13 @@ NGF ignores the Gateway API `timeouts` field on HTTPRoute rules, so `timeout` se
 `proxy_read_timeout` and `proxy_send_timeout` through a `ProxySettingsPolicy` instead. NGINX applies
 these between two reads or writes, not to the whole request, so a response that streams data keeps the
 connection open. The value is at most four digits with a unit (`ms`, `s`, `m`, or `h`); `infinity` is
-not allowed. The `ProxySettingsPolicy` CRD comes with NGF 2.6 and later.
+not allowed. The `ProxySettingsPolicy` CRD comes with NGF 2.6 and later. On NGF 2.5, set long timeouts
+with `snippets` instead (see below).
 
 #### NGINX policies
 
-`snippets` and `clientSettings` tune NGINX for the HTTPS route. They work the same with or without
-`gateway.create`, because both attach to the route, not the Gateway.
+`snippets` and `clientSettings` tune NGINX for the HTTPS route. They work the same with any
+Gateway, because both attach to the route, not the Gateway.
 
 ```yaml
     ingress:

@@ -15,6 +15,11 @@
 {{- toYaml (merge $labels (.w.selectorLabels | default dict)) -}}
 {{- end }}
 
+{{/* Labels for objects shared by workloads (the ngf Gateway and its Issuer): app only, never role. Context: the root. */}}
+{{- define "sw.appLabels" -}}
+{{- toYaml (dict "app" .Values.app) -}}
+{{- end }}
+
 {{/* "true" when the value is the boolean false, which turns a default off. */}}
 {{- define "sw.isOff" -}}
 {{- if and (kindIs "bool" .) (not .) }}true{{ end -}}
@@ -195,45 +200,84 @@ ports:
 {{- .w.serviceName | default (include "sw.fullname" .) -}}
 {{- end }}
 
-{{/* NGF defaults match the names apps already use, so migrating keeps the Gateway's load balancer and certificate. */}}
 {{- define "sw.ingressTlsSecret" -}}
-{{- $default := printf "%s-tls" (include "sw.ingressName" .) -}}
-{{- if eq .in.backend "ngf" }}{{ $default = printf "%s-tls" .root.Values.app }}{{ end -}}
-{{- dig "tls" "secretName" $default .in -}}
-{{- end }}
-
-{{- define "sw.ngfGatewayName" -}}
-{{- dig "gateway" "name" (printf "%s-nginx-gateway" .root.Values.app) .in -}}
-{{- end }}
-
-{{- define "sw.ngfGatewayNamespace" -}}
-{{- dig "gateway" "namespace" "nginx-gateway" .in -}}
+{{- dig "tls" "secretName" (printf "%s-tls" (include "sw.ingressName" .)) .in -}}
 {{- end }}
 
 {{/*
-Fails the render when two NGF entries that create a Gateway would render the
-same Gateway, or would write the same TLS Secret in one namespace.
+The Gateway an ngf entry names, as a YAML map. Takes dict "root" $ "entry" "<workload>/<entry>" "key" <Gateway key>.
+default is implicit; any other key must be declared under ingresses.ngf.gateways. The defaults for default match
+the names apps already use, so migrating keeps the Gateway's load balancer and certificate.
+*/}}
+{{- define "sw.ngfGateway" -}}
+{{- $declared := dig "ngf" "gateways" (dict) (.root.Values.ingresses | default (dict)) -}}
+{{- $key := .key -}}
+{{- if and (ne $key "default") (not (hasKey $declared $key)) -}}
+{{- fail (printf "ngf entry %q names Gateway %q, which is not under ingresses.ngf.gateways" .entry $key) -}}
+{{- end -}}
+{{- $g := get $declared $key | default (dict) -}}
+{{- $app := .root.Values.app -}}
+{{- $name := ternary (printf "%s-nginx-gateway" $app) (printf "%s-%s-gateway" $app $key) (eq $key "default") -}}
+{{- $secret := ternary (printf "%s-tls" $app) (printf "%s-%s-tls" $app $key) (eq $key "default") -}}
+{{- toYaml (dict
+  "key" $key
+  "create" (ne (dig "create" true $g) false)
+  "name" (dig "name" $name $g)
+  "namespace" (dig "namespace" "nginx-gateway" $g)
+  "className" (dig "className" "nginx" $g)
+  "annotations" (dig "annotations" (dict) $g)
+  "secretName" (dig "tls" "secretName" $secret $g)
+  "clusterIssuer" (dig "tls" "clusterIssuer" "" $g)
+  "acme" (dig "tls" "acme" (dict) $g)
+  "listeners" (dig "listeners" (dict) $g)) -}}
+{{- end }}
+
+{{/*
+Hostnames a created Gateway needs listeners for: those of every enabled ngf entry that names it, across all
+workloads, in workload and entry order, without repeats. Takes dict "root" $ "key" <Gateway key>, renders a YAML list.
+*/}}
+{{- define "sw.ngfGatewayHostnames" -}}
+{{- $hosts := list -}}
+{{- $key := .key -}}
+{{- range $name, $w := .root.Values.workloads -}}
+{{- if and (eq $w.kind "Web") (ne $w.enabled false) -}}
+{{- range $ekey, $in := $w.ingress -}}
+{{- if and (eq $in.backend "ngf") (ne $in.enabled false) (eq ($in.gateway | default "default") $key) -}}
+{{- range $in.hostnames -}}{{- if not (has . $hosts) -}}{{- $hosts = append $hosts . -}}{{- end -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toYaml $hosts -}}
+{{- end }}
+
+{{/*
+Fails the render when an enabled ngf entry names an undeclared Gateway, when two created Gateways that are in
+use would render the same Gateway, or when they would write the same TLS Secret in one namespace.
 */}}
 {{- define "sw.assertUniqueGateways" -}}
 {{- $gateways := dict -}}
 {{- $secrets := dict -}}
+{{- $seen := list -}}
 {{- range $name, $w := .Values.workloads -}}
 {{- if and (eq $w.kind "Web") (ne $w.enabled false) -}}
-{{- range $key, $in := $w.ingress -}}
-{{- if and (eq $in.backend "ngf") (ne $in.enabled false) (ne (dig "gateway" "create" true $in) false) -}}
-{{- $c := dict "root" $ "name" $name "w" $w "key" $key "in" $in -}}
-{{- $id := printf "%s/%s" $name $key -}}
-{{- $ns := include "sw.ngfGatewayNamespace" $c -}}
-{{- $gw := printf "%s/%s" $ns (include "sw.ngfGatewayName" $c) -}}
-{{- $secret := printf "%s/%s" $ns (include "sw.ingressTlsSecret" $c) -}}
-{{- with get $gateways $gw -}}
-{{- fail (printf "ngf entries %q and %q would both render Gateway %s; set gateway.name on one of them" . $id $gw) -}}
+{{- range $ekey, $in := $w.ingress -}}
+{{- if and (eq $in.backend "ngf") (ne $in.enabled false) -}}
+{{- $key := $in.gateway | default "default" -}}
+{{- $gw := include "sw.ngfGateway" (dict "root" $ "entry" (printf "%s/%s" $name $ekey) "key" $key) | fromYaml -}}
+{{- if and $gw.create (not (has $key $seen)) -}}
+{{- $seen = append $seen $key -}}
+{{- $gwId := printf "%s/%s" $gw.namespace $gw.name -}}
+{{- $secretId := printf "%s/%s" $gw.namespace $gw.secretName -}}
+{{- with get $gateways $gwId -}}
+{{- fail (printf "ngf Gateways %q and %q would both render Gateway %s; set name on one of them" . $key $gwId) -}}
 {{- end -}}
-{{- with get $secrets $secret -}}
-{{- fail (printf "ngf entries %q and %q would both write TLS secret %s; set tls.secretName on one of them" . $id $secret) -}}
+{{- with get $secrets $secretId -}}
+{{- fail (printf "ngf Gateways %q and %q would both write TLS secret %s; set tls.secretName on one of them" . $key $secretId) -}}
 {{- end -}}
-{{- $_ := set $gateways $gw $id -}}
-{{- $_ := set $secrets $secret $id -}}
+{{- $_ := set $gateways $gwId $key -}}
+{{- $_ := set $secrets $secretId $key -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
@@ -267,10 +311,10 @@ same name. Takes dict "root" $ "backend" <backend>.
 
 {{/*
 The ACME Issuer every TLS backend renders unless tls.clusterIssuer is set.
-dict "c" <ingress context> "name" <Issuer name> "namespace" <ns> "solver" <backend's solver map>.
+dict "c" <context for the selector labels> "labels" <optional labels replacing the selector> "acme" <tls.acme map> "name" <Issuer name> "namespace" <ns> "solver" <backend's solver map>.
 */}}
 {{- define "sw.acmeIssuer" -}}
-{{- $acme := dig "tls" "acme" (dict) .c.in -}}
+{{- $acme := .acme -}}
 {{- $solver := .solver -}}
 {{- with $acme.waitInsteadOfSelfCheck }}{{ $solver = merge (dict "waitInsteadOfSelfCheck" .) $solver }}{{ end -}}
 apiVersion: cert-manager.io/v1
@@ -278,7 +322,7 @@ kind: Issuer
 metadata:
   name: {{ .name }}
   namespace: {{ .namespace }}
-  labels: {{- include "sw.selector" .c | nindent 4 }}
+  labels: {{- (.labels | default (include "sw.selector" .c | fromYaml)) | toYaml | nindent 4 }}
 spec:
   acme:
     server: {{ $acme.server | default "https://acme-v02.api.letsencrypt.org/directory" }}

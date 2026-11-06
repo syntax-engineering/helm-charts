@@ -2,6 +2,45 @@
 
 Each entry says what changes in rendered output for existing apps.
 
+## [0.5.0] - 2026-11-05
+
+No rendered-output change for values that do not use `ingress`. This release reshapes the 0.4.0 `ngf`
+ingress API, and values that use the removed fields must be migrated:
+- `gateway.annotations`, `gateway.name`, `gateway.namespace`, and `gateway.className` on an `ngf` entry
+  move to `ingresses.ngf.gateways.<key>.annotations`, `.name`, `.namespace`, and `.className`.
+- `tls.*` on an `ngf` entry moves to `ingresses.ngf.gateways.<key>.tls`.
+- `gateway.create: false` becomes `gateway: <key>` naming a shared Gateway declared under
+  `ingresses.ngf.gateways`, or an external Gateway there (`create: false`, `name`, `namespace`,
+  `listeners`).
+
+A 0.4.0 values file that sets the `gateway.*` object form or `tls.*` on an `ngf` entry now fails the
+schema. `contour` entries keep `tls`.
+
+Added (all optional):
+- `ingresses.ngf.gateways`, a map of Gateways keyed by name, which `ngf` entries pick with a new
+  `gateway: <key>` field (default `default`). `default` is implicit: an enabled `ngf` entry that names
+  it gets a Gateway rendered with the defaults when it is not declared, named `<app>-nginx-gateway`
+  with the Secret `<app>-tls` and the Issuer `<app>-nginx-gateway-acme`, the same names 0.4.0 used. Other
+  keys must be declared and default to `<app>-<key>-gateway` and `<app>-<key>-tls`.
+  Per Gateway: `name`, `namespace`, `className`, `annotations`, `tls` (`secretName`, `clusterIssuer`,
+  `acme`), `create`, and `listeners.http`/`listeners.https`.
+- A created Gateway renders once, with one Issuer and one Secret, labeled `app` only (no `role`), and gets listeners for the hostnames
+  of every enabled `ngf` entry that names it, across all workloads. With `create: false` the Gateway,
+  Issuer, and Secret are not rendered; routes attach to the named `listeners` through
+  `parentRefs.sectionName`.
+- The render fails for an entry that names an undeclared Gateway, for two created Gateways that would
+  render the same Gateway or write the same Secret in one namespace. The schema rejects an external
+  Gateway without `name`, `namespace`, or `listeners`, and `tls`, `className`, or `annotations` on it.
+  Unknown keys under `ingresses` and `ingresses.ngf` are rejected too.
+- `paths` items on `ngf` entries take `match: Exact` and `rewrite: { fullPath: / }`, which render an
+  `Exact` path match and a `URLRewrite` filter with `ReplaceFullPath`.
+- `service` and `port` on `paths` items default to the workload's own Service and port. They must be
+  set together. This also applies to `contour` entries, which do not take `match` or `rewrite`.
+
+Removed from `ngf` entries (the schema rejects them): the `gateway` object form (`create`, `name`,
+`namespace`, `className`, `annotations`) and `tls`. Move them to `ingresses.ngf.gateways.<key>`.
+`contour` entries keep `tls` unchanged.
+
 ## [0.4.0] - 2026-10-27
 
 No rendered-output change for existing values.

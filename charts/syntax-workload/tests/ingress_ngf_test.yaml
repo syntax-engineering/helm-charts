@@ -15,6 +15,7 @@ tests:
       - isKind: { of: Issuer }
       - isAPIVersion: { of: cert-manager.io/v1 }
       - equal: { path: metadata.name, value: acme-nginx-gateway-acme }
+      - equal: { path: metadata.labels, value: { app: acme } }
       - equal: { path: metadata.namespace, value: nginx-gateway }
       - equal:
           path: spec
@@ -35,6 +36,7 @@ tests:
       - isAPIVersion: { of: gateway.networking.k8s.io/v1 }
       - equal: { path: metadata.name, value: acme-nginx-gateway }
       - equal: { path: metadata.namespace, value: nginx-gateway }
+      - equal: { path: metadata.labels, value: { app: acme } }
       - equal: { path: metadata.annotations, value: { cert-manager.io/issuer: acme-nginx-gateway-acme } }
       - equal: { path: spec.gatewayClassName, value: nginx }
 
@@ -103,18 +105,47 @@ tests:
             - matches: [{ path: { type: PathPrefix, value: / } }]
               filters: [{ type: RequestRedirect, requestRedirect: { scheme: https, statusCode: 301 } }]
 
-  - it: attaches to an existing Gateway without rendering a Gateway or an Issuer
+  - it: attaches to an external Gateway through its listener names, without rendering a Gateway, Issuer, or Secret
     set:
-      workloads.web.ingress.public.gateway: { create: false, name: shared, namespace: edge }
+      ingresses.ngf.gateways.shared: { create: false, name: platform-gateway, namespace: edge, listeners: { http: web80, https: web443 } }
+      workloads.web.ingress.public.gateway: shared
     asserts:
       - hasDocuments: { count: 2 }
       - isKind: { of: HTTPRoute }
-      - equal: { path: 'spec.parentRefs[0].name', value: shared }
-      - equal: { path: 'spec.parentRefs[0].namespace', value: edge }
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs
+          value: [{ group: gateway.networking.k8s.io, kind: Gateway, name: platform-gateway, namespace: edge, sectionName: web443 }]
+        documentIndex: 0
+      - equal:
+          path: spec.parentRefs
+          value: [{ group: gateway.networking.k8s.io, kind: Gateway, name: platform-gateway, namespace: edge, sectionName: web80 }]
+        documentIndex: 1
+      - equal: { path: spec.hostnames, value: [api.acme.example.com, mcp.acme.example.com] }
+        documentIndex: 0
+
+  - it: renders nothing for a declared Gateway that no entry names
+    set:
+      ingresses.ngf.gateways.unused: { create: false, name: platform-gateway, namespace: edge, listeners: { http: http, https: https } }
+      ingresses.ngf.gateways.also-unused: { tls: { secretName: acme-tls } }
+    asserts:
+      - hasDocuments: { count: 4 }
+
+  - it: fails when an entry names a Gateway that is not declared
+    set: { workloads.web.ingress.public.gateway: missing }
+    asserts:
+      - failedTemplate: { errorPattern: 'ngf entry "web/public" names Gateway "missing", which is not under ingresses.ngf.gateways' }
+
+  - it: renders the implicit default Gateway when only default is named but another Gateway is declared
+    set:
+      ingresses.ngf.gateways.shared: { create: false, name: platform-gateway, namespace: edge, listeners: { http: http, https: https } }
+    documentIndex: 1
+    asserts:
+      - equal: { path: metadata.name, value: acme-nginx-gateway }
 
   - it: uses a ClusterIssuer instead of its own Issuer when tls.clusterIssuer is set
     set:
-      workloads.web.ingress.public.tls: { clusterIssuer: letsencrypt-prod }
+      ingresses.ngf.gateways.default.tls: { clusterIssuer: letsencrypt-prod }
     asserts:
       - hasDocuments: { count: 3 }
       - isKind: { of: Gateway }
@@ -129,14 +160,14 @@ tests:
         hostnames: ['*.acme.example.com']
         redirectStatusCode: 308
         annotations: { team: core }
+      ingresses.ngf.gateways.default:
+        name: edge
+        namespace: gateways
+        className: nginx-internal
+        annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
         tls:
           secretName: acme-wildcard-tls
           acme: { email: ops@example.com, server: https://acme-staging-v02.api.letsencrypt.org/directory, waitInsteadOfSelfCheck: 30s }
-        gateway:
-          name: edge
-          namespace: gateways
-          className: nginx-internal
-          annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
     asserts:
       - equal: { path: metadata.name, value: edge-acme }
         documentIndex: 0
@@ -274,7 +305,8 @@ tests:
 
   - it: renders both policies when an existing Gateway is used
     set:
-      workloads.web.ingress.public.gateway: { create: false, name: shared, namespace: edge }
+      ingresses.ngf.gateways.shared: { create: false, name: platform-gateway, namespace: edge, listeners: { http: http, https: https } }
+      workloads.web.ingress.public.gateway: shared
       workloads.web.ingress.public.snippets: { http.server.location: proxy_read_timeout 3600s; }
       workloads.web.ingress.public.clientSettings: { body: { maxSize: 1g } }
     asserts:
@@ -318,23 +350,63 @@ tests:
       - notEqual: { path: metadata.name, value: acme-web-public-redirect }
         documentIndex: 2
 
-  - it: fails when two entries would render the same Gateway
+  - it: fails when two created Gateways would render the same Gateway
     set:
-      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com] }
+      ingresses.ngf.gateways.internal: { name: acme-nginx-gateway, tls: { secretName: acme-internal-tls } }
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: internal }
     asserts:
-      - failedTemplate: { errorPattern: 'ngf entries "web/internal" and "web/public" would both render Gateway nginx-gateway/acme-nginx-gateway; set gateway.name on one of them' }
+      - failedTemplate: { errorPattern: 'ngf Gateways "internal" and "default" would both render Gateway nginx-gateway/acme-nginx-gateway; set name on one of them' }
 
-  - it: fails when two Gateways in one namespace would share a TLS secret
+  - it: fails when two created Gateways in one namespace would share a TLS secret
     set:
-      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: { name: acme-internal } }
+      ingresses.ngf.gateways.internal: { tls: { secretName: acme-tls } }
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: internal }
     asserts:
-      - failedTemplate: { errorPattern: 'ngf entries "web/internal" and "web/public" would both write TLS secret nginx-gateway/acme-tls; set tls.secretName on one of them' }
+      - failedTemplate: { errorPattern: 'ngf Gateways "internal" and "default" would both write TLS secret nginx-gateway/acme-tls; set tls.secretName on one of them' }
 
-  - it: allows two entries with distinct Gateways and secrets
+  - it: allows two created Gateways with the same Secret name in different namespaces
     set:
-      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: { name: acme-internal }, tls: { secretName: acme-internal-tls } }
+      ingresses.ngf.gateways.internal: { namespace: internal-gateways, tls: { secretName: acme-tls } }
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: internal }
     asserts:
       - hasDocuments: { count: 8 }
+
+  # A non-default key names its Gateway <app>-<key>-gateway and its Secret <app>-<key>-tls.
+  - it: names a non-default Gateway, its Issuer, and its Secret after its key
+    set:
+      ingresses.ngf.gateways.internal: {}
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com], gateway: internal }
+    asserts:
+      - hasDocuments: { count: 8 }
+      - equal: { path: metadata.name, value: acme-internal-gateway-acme }
+        documentIndex: 0
+      - equal: { path: spec.acme.privateKeySecretRef.name, value: acme-internal-gateway-acme-account }
+        documentIndex: 0
+      - equal: { path: metadata.name, value: acme-internal-gateway }
+        documentIndex: 1
+      - equal: { path: 'spec.listeners[1].tls.certificateRefs[0].name', value: acme-internal-tls }
+        documentIndex: 1
+      - equal: { path: metadata.annotations, value: { cert-manager.io/issuer: acme-internal-gateway-acme } }
+        documentIndex: 1
+      - equal: { path: 'spec.parentRefs[0].name', value: acme-internal-gateway }
+        documentIndex: 2
+      - equal: { path: metadata.name, value: acme-nginx-gateway }
+        documentIndex: 5
+
+  # Both entries name the default Gateway, so it renders once, with the hostnames of both.
+  - it: renders one Gateway, Issuer, and Secret for two entries that name the same Gateway
+    set:
+      workloads.web.ingress.internal: { backend: ngf, hostnames: [internal.acme.example.com, api.acme.example.com] }
+    asserts:
+      - hasDocuments: { count: 6 }
+      - lengthEqual: { path: spec.listeners, count: 6 }
+        documentIndex: 1
+      - equal: { path: 'spec.listeners[0].hostname', value: internal.acme.example.com }
+        documentIndex: 1
+      - equal: { path: 'spec.listeners[4].hostname', value: mcp.acme.example.com }
+        documentIndex: 1
+      - equal: { path: 'spec.listeners[5].tls.certificateRefs[0].name', value: acme-tls }
+        documentIndex: 1
 
   # The Gateway, Issuer, and Secret are named after the app, so name only changes the routes.
   - it: names the routes after name when set
@@ -350,7 +422,8 @@ tests:
 
   - it: fails when two entries would render the same route names
     set:
-      workloads.web.ingress.internal: { backend: ngf, name: acme-web-public, hostnames: [internal.acme.example.com], gateway: { create: false } }
+      ingresses.ngf.gateways.shared: { create: false, name: platform-gateway, namespace: edge, listeners: { http: http, https: https } }
+      workloads.web.ingress.internal: { backend: ngf, name: acme-web-public, hostnames: [internal.acme.example.com], gateway: shared }
     asserts:
       - failedTemplate: { errorPattern: 'ngf entries "web/internal" and "web/public" would both render objects named acme-web-public; change name on one of them' }
 
