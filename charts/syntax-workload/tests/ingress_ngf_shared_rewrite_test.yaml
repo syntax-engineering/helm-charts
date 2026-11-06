@@ -1,0 +1,28 @@
+suite: shared Gateway with path rewrite
+templates:
+  - templates/ingress-ngf.yaml
+values:
+  - values/ingress-shared-gateway-rewrite.yaml
+tests:
+  - it: matches the committed golden output
+    asserts:
+      - matchSnapshot: {}
+
+  # Independent of the snapshot: the properties the fixture exercises.
+  - it: shares one Gateway between web and api
+    documentSelector: { path: kind, value: Gateway }
+    asserts:
+      - equal: { path: metadata.name, value: acme-nginx-gateway }
+      - equal:
+          path: metadata.annotations["gateway.nginx.org/nginxproxy"]
+          value: global-proxy-config
+      - lengthEqual: { path: spec.listeners, count: 6 }
+      - equal: { path: "spec.listeners[0].hostname", value: api.acme.example.com }
+      - equal: { path: "spec.listeners[5].hostname", value: www.acme.example.com }
+
+  - it: rewrites Exact /metrics to / on web's Service
+    documentSelector: { path: "spec.rules[1].matches[0].path.value", value: /metrics }
+    asserts:
+      - equal: { path: "spec.rules[1].matches", value: [{ path: { type: Exact, value: /metrics } }] }
+      - equal: { path: "spec.rules[1].filters[0].urlRewrite.path", value: { type: ReplaceFullPath, replaceFullPath: / } }
+      - equal: { path: "spec.rules[1].backendRefs[0]", value: { group: '', kind: Service, name: acme-svc, port: 8080 } }

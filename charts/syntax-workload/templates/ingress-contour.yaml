@@ -9,7 +9,7 @@
 {{- $issuerRef = dict "kind" "Issuer" "name" (printf "%s-acme" (include "sw.ingressName" $c)) }}
 {{- /* The solver's challenge Ingress uses the entry's class, so the same Contour serves it. */}}
 ---
-{{ include "sw.acmeIssuer" (dict "c" $c "name" $issuerRef.name "namespace" $.Values.namespace "solver" (dict "http01" (dict "ingress" (dict "ingressClassName" ($in.className | default "contour"))))) }}
+{{ include "sw.acmeIssuer" (dict "c" $c "acme" (dig "tls" "acme" (dict) $in) "name" $issuerRef.name "namespace" $.Values.namespace "solver" (dict "http01" (dict "ingress" (dict "ingressClassName" ($in.className | default "contour"))))) }}
 {{- end }}
 {{- /* HTTPProxy has no cert-manager shim, so the chart asks for the certificate itself. */}}
 {{- $perHost := dig "tls" "perHost" false $in }}
@@ -24,8 +24,8 @@
 ---
 {{ include "sw.contourCertificate" (dict "c" $c "name" (include "sw.ingressName" $c) "secretName" (include "sw.ingressTlsSecret" $c) "issuerRef" $issuerRef "dnsNames" $in.hostnames) }}
 {{- end }}
-{{- /* protocol describes the workload's Service, so path rules to other Services leave it out. */}}
-{{- $routes := prepend ($in.paths | default list) (dict "prefix" "/" "service" (include "sw.ingressService" $c) "port" $w.port "protocol" $in.protocol) }}
+{{- /* protocol describes the workload's Service: the default route and path rules that leave service out get it; rules to other Services do not. */}}
+{{- $routes := prepend ($in.paths | default list) (dict "prefix" "/") }}
 {{- /* An HTTPProxy serves one fqdn, so each hostname gets its own. */}}
 {{- range $host := $in.hostnames }}
 {{- $objName := include "sw.ingressName" $c }}
@@ -64,10 +64,12 @@ spec:
     {{- range $route := $routes }}
     - conditions: [{ prefix: {{ $route.prefix }} }]
       services:
-        - name: {{ $route.service }}
-          port: {{ $route.port }}
-          {{- with $route.protocol }}
+        - name: {{ $route.service | default (include "sw.ingressService" $c) }}
+          port: {{ $route.port | default $w.port }}
+          {{- if not $route.service }}
+          {{- with $in.protocol }}
           protocol: {{ . }}
+          {{- end }}
           {{- end }}
           {{- with $in.responseHeaders }}
           responseHeadersPolicy:

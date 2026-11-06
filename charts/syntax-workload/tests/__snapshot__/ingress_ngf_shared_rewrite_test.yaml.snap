@@ -1,0 +1,356 @@
+matches the committed golden output:
+  1: |
+    apiVersion: cert-manager.io/v1
+    kind: Issuer
+    metadata:
+      labels:
+        app: acme
+      name: acme-nginx-gateway-acme
+      namespace: nginx-gateway
+    spec:
+      acme:
+        email: devops@syntaxdata.com
+        privateKeySecretRef:
+          name: acme-nginx-gateway-acme-account
+        server: https://acme-v02.api.letsencrypt.org/directory
+        solvers:
+          - http01:
+              gatewayHTTPRoute:
+                parentRefs:
+                  - group: gateway.networking.k8s.io
+                    kind: Gateway
+                    name: acme-nginx-gateway
+                    namespace: nginx-gateway
+  2: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata:
+      annotations:
+        cert-manager.io/issuer: acme-nginx-gateway-acme
+        gateway.nginx.org/nginxproxy: global-proxy-config
+      labels:
+        app: acme
+      name: acme-nginx-gateway
+      namespace: nginx-gateway
+    spec:
+      gatewayClassName: nginx
+      listeners:
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchExpressions:
+                  - key: kubernetes.io/metadata.name
+                    operator: In
+                    values:
+                      - acme
+                      - nginx-gateway
+          hostname: api.acme.example.com
+          name: http-api-acme-example-com
+          port: 80
+          protocol: HTTP
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchLabels:
+                  kubernetes.io/metadata.name: acme
+          hostname: api.acme.example.com
+          name: https-api-acme-example-com
+          port: 443
+          protocol: HTTPS
+          tls:
+            certificateRefs:
+              - group: ""
+                kind: Secret
+                name: acme-tls
+            mode: Terminate
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchExpressions:
+                  - key: kubernetes.io/metadata.name
+                    operator: In
+                    values:
+                      - acme
+                      - nginx-gateway
+          hostname: app.acme.example.com
+          name: http-app-acme-example-com
+          port: 80
+          protocol: HTTP
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchLabels:
+                  kubernetes.io/metadata.name: acme
+          hostname: app.acme.example.com
+          name: https-app-acme-example-com
+          port: 443
+          protocol: HTTPS
+          tls:
+            certificateRefs:
+              - group: ""
+                kind: Secret
+                name: acme-tls
+            mode: Terminate
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchExpressions:
+                  - key: kubernetes.io/metadata.name
+                    operator: In
+                    values:
+                      - acme
+                      - nginx-gateway
+          hostname: www.acme.example.com
+          name: http-www-acme-example-com
+          port: 80
+          protocol: HTTP
+        - allowedRoutes:
+            namespaces:
+              from: Selector
+              selector:
+                matchLabels:
+                  kubernetes.io/metadata.name: acme
+          hostname: www.acme.example.com
+          name: https-www-acme-example-com
+          port: 443
+          protocol: HTTPS
+          tls:
+            certificateRefs:
+              - group: ""
+                kind: Secret
+                name: acme-tls
+            mode: Terminate
+  3: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: api
+      name: acme-api
+      namespace: acme
+    spec:
+      hostnames:
+        - api.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: https-api-acme-example-com
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-api-svc
+              port: 9393
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  4: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: api
+      name: acme-api-redirect
+      namespace: acme
+    spec:
+      hostnames:
+        - api.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: http-api-acme-example-com
+      rules:
+        - filters:
+            - requestRedirect:
+                scheme: https
+                statusCode: 308
+              type: RequestRedirect
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  5: |
+    apiVersion: gateway.nginx.org/v1alpha1
+    kind: ClientSettingsPolicy
+    metadata:
+      labels:
+        app: acme
+        role: api
+      name: acme-api
+      namespace: acme
+    spec:
+      body:
+        timeout: 300s
+      targetRef:
+        group: gateway.networking.k8s.io
+        kind: HTTPRoute
+        name: acme-api
+  6: |
+    apiVersion: gateway.nginx.org/v1alpha1
+    kind: ProxySettingsPolicy
+    metadata:
+      labels:
+        app: acme
+        role: api
+      name: acme-api
+      namespace: acme
+    spec:
+      targetRefs:
+        - group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: acme-api
+      timeout:
+        read: 1200s
+        send: 1200s
+  7: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: web
+      name: acme-web
+      namespace: acme
+    spec:
+      hostnames:
+        - app.acme.example.com
+        - www.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: https-app-acme-example-com
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: https-www-acme-example-com
+      rules:
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-svc
+              port: 8080
+          filters:
+            - responseHeaderModifier:
+                set:
+                  - name: Strict-Transport-Security
+                    value: max-age=31536000
+              type: ResponseHeaderModifier
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-svc
+              port: 8080
+          filters:
+            - type: URLRewrite
+              urlRewrite:
+                path:
+                  replaceFullPath: /
+                  type: ReplaceFullPath
+            - responseHeaderModifier:
+                set:
+                  - name: Strict-Transport-Security
+                    value: max-age=31536000
+              type: ResponseHeaderModifier
+          matches:
+            - path:
+                type: Exact
+                value: /metrics
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-assets-svc
+              port: 8082
+          filters:
+            - responseHeaderModifier:
+                set:
+                  - name: Strict-Transport-Security
+                    value: max-age=31536000
+              type: ResponseHeaderModifier
+          matches:
+            - path:
+                type: PathPrefix
+                value: /assets
+        - backendRefs:
+            - group: ""
+              kind: Service
+              name: acme-assets-svc
+              port: 8082
+          filters:
+            - responseHeaderModifier:
+                set:
+                  - name: Strict-Transport-Security
+                    value: max-age=31536000
+              type: ResponseHeaderModifier
+          matches:
+            - path:
+                type: PathPrefix
+                value: /packs
+  8: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      labels:
+        app: acme
+        role: web
+      name: acme-web-redirect
+      namespace: acme
+    spec:
+      hostnames:
+        - app.acme.example.com
+        - www.acme.example.com
+      parentRefs:
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: http-app-acme-example-com
+        - group: gateway.networking.k8s.io
+          kind: Gateway
+          name: acme-nginx-gateway
+          namespace: nginx-gateway
+          sectionName: http-www-acme-example-com
+      rules:
+        - filters:
+            - requestRedirect:
+                scheme: https
+                statusCode: 308
+              type: RequestRedirect
+          matches:
+            - path:
+                type: PathPrefix
+                value: /
+  9: |
+    apiVersion: gateway.nginx.org/v1alpha1
+    kind: ClientSettingsPolicy
+    metadata:
+      labels:
+        app: acme
+        role: web
+      name: acme-web
+      namespace: acme
+    spec:
+      body:
+        timeout: 300s
+      targetRef:
+        group: gateway.networking.k8s.io
+        kind: HTTPRoute
+        name: acme-web

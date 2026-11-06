@@ -1,0 +1,37 @@
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+ingresses:
+  ngf:
+    gateways:
+      default:
+        annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
+        tls:
+          secretName: acme-tls
+          acme: { email: ops@example.com, server: "https://acme-staging-v02.api.letsencrypt.org/directory", waitInsteadOfSelfCheck: 30s }
+      internal:
+        className: nginx-internal
+        tls: { clusterIssuer: letsencrypt-prod }
+      shared:
+        create: false
+        name: platform-gateway
+        namespace: nginx-gateway
+        listeners: { http: http, https: https }
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: 2
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [api.acme.example.com]
+      private:
+        backend: ngf
+        gateway: internal
+        hostnames: [internal.acme.example.com]
+      partner:
+        backend: ngf
+        gateway: shared
+        hostnames: [partner.acme.example.com]

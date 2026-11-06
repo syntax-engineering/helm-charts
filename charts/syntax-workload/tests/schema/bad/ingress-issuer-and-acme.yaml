@@ -9,6 +9,6 @@ workloads:
     replicas: 2
     ingress:
       public:
-        backend: ngf
+        backend: contour
         hostnames: [api.acme.example.com]
         tls: { clusterIssuer: letsencrypt-prod, acme: { email: ops@example.com } }
