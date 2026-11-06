@@ -23,3 +23,7 @@ parity:
 policy:
     helm template standard {{chart}} -f {{chart}}/tests/values/standard.yaml > policies/tests/standard/rendered.yaml
     kyverno test policies/tests/standard --require-tests
+
+# Diff an app repo's rendered overlay: <base-ref> with its pinned chart vs HEAD with this checkout's chart.
+render-diff app overlay base-ref chart-dir="":
+    scripts/render-diff.rb {{app}} {{overlay}} {{base-ref}} {{chart-dir}}

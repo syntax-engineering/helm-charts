@@ -1,6 +1,7 @@
 [tools]
 helm = "3.18.4"
 just = "1.52.0"
+kustomize = "5.8.1"
 kyverno = "1.19.1"
 ruby = "3.3.6"
 yq = "4.45.4"
