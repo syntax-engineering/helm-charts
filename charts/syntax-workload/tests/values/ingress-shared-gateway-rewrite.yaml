@@ -1,0 +1,49 @@
+# Shared-Gateway ingress with path rewrite: web and api share the default Gateway, Exact /metrics is
+# rewritten to / on web's Service, and /assets and /packs go to the assets Service.
+app: acme
+namespace: acme
+image: ghcr.io/example/acme:1.0.0
+ingresses:
+  ngf:
+    gateways:
+      default:
+        annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    serviceName: acme-svc
+    replicas: 2
+    ingress:
+      main:
+        backend: ngf
+        name: acme-web
+        hostnames: [app.acme.example.com, www.acme.example.com]
+        redirectStatusCode: 308
+        responseHeaders: { Strict-Transport-Security: max-age=31536000 }
+        clientSettings: { body: { timeout: 300s } }
+        paths:
+          - { prefix: /metrics, match: Exact, rewrite: { fullPath: / } }
+          - { prefix: /assets, service: acme-assets-svc, port: 8082 }
+          - { prefix: /packs, service: acme-assets-svc, port: 8082 }
+  assets:
+    kind: Web
+    port: 8082
+    healthPath: /500.html
+    serviceName: acme-assets-svc
+    replicas: 2
+  api:
+    kind: Web
+    port: 9393
+    probeType: tcp
+    serviceName: acme-api-svc
+    replicas: 4
+    ingress:
+      main:
+        backend: ngf
+        name: acme-api
+        hostnames: [api.acme.example.com]
+        redirectStatusCode: 308
+        clientSettings: { body: { timeout: 300s } }
+        timeout: 1200s

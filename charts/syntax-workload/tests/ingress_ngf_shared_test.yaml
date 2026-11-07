@@ -1,0 +1,44 @@
+suite: NGINX Gateway Fabric shared Gateway
+templates:
+  - templates/ingress-ngf.yaml
+values:
+  - values/ingress-shared-gateway.yaml
+tests:
+  - it: matches the committed golden output
+    asserts:
+      - matchSnapshot: {}
+
+  # mcp and web both name the implicit default Gateway, so it gets listeners for the hostnames of both.
+  # mcp comes first in workload order, then web.
+  - it: gives the shared Gateway a listener pair for the hostname of every entry that names it
+    documentSelector: { path: kind, value: Gateway }
+    asserts:
+      - isKind: { of: Gateway }
+      - equal: { path: metadata.name, value: acme-nginx-gateway }
+      - lengthEqual: { path: spec.listeners, count: 4 }
+      - equal: { path: "spec.listeners[0].name", value: http-mcp-acme-example-com }
+      - equal: { path: "spec.listeners[1].name", value: https-mcp-acme-example-com }
+      - equal: { path: "spec.listeners[2].name", value: http-api-acme-example-com }
+      - equal: { path: "spec.listeners[3].name", value: https-api-acme-example-com }
+      - equal: { path: "spec.listeners[3].hostname", value: api.acme.example.com }
+      - equal: { path: "spec.listeners[3].tls.certificateRefs[0].name", value: acme-tls }
+
+  - it: attaches the route to the listeners of its own hostname on the shared Gateway
+    documentSelector: { path: metadata.name, value: acme-mcp-public }
+    asserts:
+      - equal:
+          path: spec.parentRefs
+          value:
+            - { group: gateway.networking.k8s.io, kind: Gateway, name: acme-nginx-gateway, namespace: nginx-gateway, sectionName: https-mcp-acme-example-com }
+
+  - it: attaches the third workload to the external Gateway's listeners by name
+    documentSelector: { path: metadata.name, value: acme-other-public-redirect }
+    asserts:
+      - equal:
+          path: spec.parentRefs
+          value: [{ group: gateway.networking.k8s.io, kind: Gateway, name: elsewhere-gateway, namespace: edge-gateways, sectionName: http }]
+
+  # mcp's two routes, other's two routes, and web's Issuer, Gateway, route, and redirect.
+  - it: renders no second Gateway or Issuer
+    asserts:
+      - hasDocuments: { count: 8 }

@@ -1,0 +1,44 @@
+suite: NGINX Gateway Fabric path rules
+templates:
+  - templates/ingress-ngf.yaml
+values:
+  - values/ingress-paths.yaml
+tests:
+  - it: matches the committed golden output
+    asserts:
+      - matchSnapshot: {}
+
+  - it: matches an Exact path and rewrites the full path, defaulting to the workload's Service
+    documentSelector: { path: metadata.name, value: acme-web-public }
+    asserts:
+      - equal:
+          path: spec.rules[1]
+          value:
+            matches: [{ path: { type: Exact, value: /metrics } }]
+            filters:
+              - type: URLRewrite
+                urlRewrite: { path: { type: ReplaceFullPath, replaceFullPath: / } }
+              - type: ResponseHeaderModifier
+                responseHeaderModifier: { set: [{ name: X-Frame-Options, value: DENY }] }
+            backendRefs: [{ group: '', kind: Service, name: acme-web, port: 8080 }]
+
+  - it: still sends a prefix rule to another Service, with no rewrite
+    documentSelector: { path: metadata.name, value: acme-web-public }
+    asserts:
+      - equal: { path: "spec.rules[2].matches", value: [{ path: { type: PathPrefix, value: /assets } }] }
+      - equal: { path: "spec.rules[2].backendRefs", value: [{ group: '', kind: Service, name: acme-assets-svc, port: 80 }] }
+      - notContains: { path: "spec.rules[2].filters", content: { type: URLRewrite } }
+
+  - it: matches an Exact path to another Service
+    documentSelector: { path: metadata.name, value: acme-web-public }
+    asserts:
+      - equal: { path: "spec.rules[3].matches", value: [{ path: { type: Exact, value: /status } }] }
+      - equal: { path: "spec.rules[3].backendRefs", value: [{ group: '', kind: Service, name: acme-assets-svc, port: 80 }] }
+
+  - it: rewrites a prefix rule's full path without Exact
+    set:
+      workloads.web.ingress.public.paths: [{ prefix: /old, rewrite: { fullPath: /new } }]
+    documentSelector: { path: metadata.name, value: acme-web-public }
+    asserts:
+      - equal: { path: "spec.rules[1].matches", value: [{ path: { type: PathPrefix, value: /old } }] }
+      - equal: { path: "spec.rules[1].filters[0].urlRewrite.path.replaceFullPath", value: /new }
