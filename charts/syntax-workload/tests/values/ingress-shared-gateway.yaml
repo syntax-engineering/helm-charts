@@ -1,0 +1,41 @@
+# Two workloads share the implicit default Gateway; a third attaches to an external Gateway.
+app: acme
+namespace: acme-env
+image: ghcr.io/example/acme:1.0.0
+ingresses:
+  ngf:
+    gateways:
+      elsewhere:
+        create: false
+        name: elsewhere-gateway
+        namespace: edge-gateways
+        listeners: { http: http, https: https }
+workloads:
+  web:
+    kind: Web
+    port: 8080
+    healthPath: /healthz
+    replicas: 2
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [api.acme.example.com]
+  mcp:
+    kind: Web
+    port: 9393
+    probeType: tcp
+    replicas: 2
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [mcp.acme.example.com]
+  other:
+    kind: Web
+    port: 9000
+    probeType: tcp
+    replicas: 2
+    ingress:
+      public:
+        backend: ngf
+        hostnames: [other.acme.example.com]
+        gateway: elsewhere

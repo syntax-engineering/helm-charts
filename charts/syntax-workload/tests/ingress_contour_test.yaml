@@ -319,3 +319,17 @@ tests:
       - notExists: { path: spec.virtualhost.corsPolicy }
       - notExists:
           path: spec.routes[0].loadBalancerPolicy
+
+  - it: defaults the Service and port of a Contour path rule to the workload's
+    set:
+      workloads.web.ingress.public: { backend: contour, hostnames: [api.acme.example.com], paths: [{ prefix: /api }] }
+    documentSelector: { path: spec.virtualhost.fqdn, value: api.acme.example.com }
+    asserts:
+      - equal: { path: "spec.routes[1].services", value: [{ name: acme-web, port: 8080 }] }
+
+  - it: gives a Contour path rule that defaults to the workload's Service the entry's protocol
+    set:
+      workloads.web.ingress.grpc: { backend: contour, hostnames: [api.acme.example.com], protocol: h2c, paths: [{ prefix: /api }] }
+    documentSelector: { path: spec.virtualhost.fqdn, value: api.acme.example.com }
+    asserts:
+      - equal: { path: "spec.routes[1].services", value: [{ name: acme-web, port: 8080, protocol: h2c }] }
