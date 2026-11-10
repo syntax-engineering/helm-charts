@@ -116,9 +116,16 @@ port. Everything else still goes to the workload's Service.
         backend: ngf
         hostnames: [app.acme.example.com]
         paths:
-          - { prefix: /assets, service: acme-assets-svc, port: 80 }
-          - { prefix: /packs, service: acme-assets-svc, port: 80 }
-          - { prefix: /metrics, match: Exact, rewrite: { fullPath: / } }
+          - prefix: /assets
+            service: acme-assets-svc
+            port: 80
+          - prefix: /packs
+            service: acme-assets-svc
+            port: 80
+          - prefix: /metrics
+            match: Exact
+            rewrite:
+              fullPath: /
 ```
 
 `ngf` rules can also set `match: Exact`, so `prefix` must match the whole path, and
@@ -197,14 +204,18 @@ ingresses:
   ngf:
     gateways:
       default:                 # implicit: used when it is not declared
-        annotations: { gateway.nginx.org/nginxproxy: global-proxy-config }
+        annotations:
+          gateway.nginx.org/nginxproxy: global-proxy-config
         tls:
-          acme: { email: ops@acme.example.com }
+          acme:
+            email: ops@acme.example.com
       shared:                  # a Gateway outside the release
         create: false
         name: platform-gateway
         namespace: nginx-gateway
-        listeners: { http: http, https: https }
+        listeners:
+          http: http
+          https: https
 workloads:
   web:
     ingress:
@@ -293,7 +304,9 @@ Gateway, because both attach to the route, not the Gateway.
             proxy_read_timeout 3600s;
             proxy_send_timeout 3600s;
         clientSettings:
-          body: { maxSize: 1g, timeout: 300s }
+          body:
+            maxSize: 1g
+            timeout: 300s
 ```
 
 `snippets` renders a `SnippetsFilter` named like the route and adds it to the route as an `ExtensionRef`
@@ -349,10 +362,21 @@ ingress:
     corsPolicy:
       allowCredentials: true
       allowOrigin: ["https://staging.acme.example.com"]
-      allowMethods: [GET, POST, OPTIONS]
-      allowHeaders: [authorization, content-type, x-grpc-web, x-user-agent, grpc-timeout]
-      exposeHeaders: [grpc-status, grpc-message]
-    loadBalancerPolicy: { strategy: WeightedLeastRequest }
+      allowMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowHeaders:
+        - authorization
+        - content-type
+        - x-grpc-web
+        - x-user-agent
+        - grpc-timeout
+      exposeHeaders:
+        - grpc-status
+        - grpc-message
+    loadBalancerPolicy:
+      strategy: WeightedLeastRequest
 ```
 
 ### `tailscale`: Tailscale
