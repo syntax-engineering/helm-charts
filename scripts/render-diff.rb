@@ -20,19 +20,6 @@ DEFAULT_CHART = File.expand_path("../charts/syntax-workload", __dir__)
 
 class RenderError < StandardError; end
 
-# Runs a command, raising RenderError with its stderr when it fails.
-def run!(*cmd, chdir: nil, what: cmd.first)
-  opts = chdir ? { chdir: chdir } : {}
-  out, err, status = Open3.capture3(*cmd, **opts)
-  raise RenderError, "#{what} failed (exit #{status.exitstatus})\n#{err.strip}" unless status.success?
-
-  out
-end
-
-def git_ok?(*args)
-  system("git", *args, out: File::NULL, err: File::NULL)
-end
-
 # A local chart directory: packaged to a tgz and unpacked so kustomize can use it as chartHome.
 class Chart
   attr_reader :dir, :name, :version
@@ -191,6 +178,19 @@ class Report
       end
     end
   end
+end
+
+# Runs a command, raising RenderError with its stderr when it fails.
+def run!(*cmd, chdir: nil, what: cmd.first)
+  opts = chdir ? { chdir: chdir } : {}
+  out, err, status = Open3.capture3(*cmd, **opts)
+  raise RenderError, "#{what} failed (exit #{status.exitstatus})\n#{err.strip}" unless status.success?
+
+  out
+end
+
+def git_ok?(*args)
+  system("git", *args, out: File::NULL, err: File::NULL)
 end
 
 def main(argv)
